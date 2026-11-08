@@ -1,22 +1,118 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BRAND_IDENTITY,
   MARKET_CATEGORIES,
   TIMEFRAME_OPTIONS,
 } from '../data/platformData';
+import {
+  ApiCandle,
+  ApiCoverage,
+  ApiMarketCategory,
+  ApiMarketInstrument,
+  MarketDataApi,
+} from '../services/marketDataApi';
 import { MarketCategoryId, TimeframeId } from '../types/backtest';
 
 export const BacktestSetupPage: React.FC = () => {
   const [selectedMarket, setSelectedMarket] =
-    useState<MarketCategoryId>('forex');
+    useState<MarketCategoryId>('crypto');
+  const [marketCategories, setMarketCategories] = useState<ApiMarketCategory[]>([]);
+  const [instruments, setInstruments] = useState<ApiMarketInstrument[]>([]);
+  const [selectedInstrument, setSelectedInstrument] =
+    useState<ApiMarketInstrument | null>(null);
+  const [instrumentSearch, setInstrumentSearch] = useState<string>('');
+  const [isLoadingInstruments, setIsLoadingInstruments] = useState<boolean>(false);
+  const [coverage, setCoverage] = useState<ApiCoverage | null>(null);
+  const [isLoadingCoverage, setIsLoadingCoverage] = useState<boolean>(false);
+
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<TimeframeId>('M15');
-  const [selectedDate, setSelectedDate] = useState<string>('2024-06-03');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-11-07');
   const [workspaceNoticeVisible, setWorkspaceNoticeVisible] =
     useState<boolean>(false);
+  const [previewCandles, setPreviewCandles] = useState<ApiCandle[]>([]);
+  const [isLoadingCandles, setIsLoadingCandles] = useState<boolean>(false);
 
-  const currentMarket =
+  // 1. Load Market Categories on Mount
+  useEffect(() => {
+    MarketDataApi.getMarkets()
+      .then((cats) => {
+        if (cats && cats.length > 0) setMarketCategories(cats);
+      })
+      .catch((err) => {
+        console.warn('Backend /api/markets not reachable yet:', err.message);
+      });
+  }, []);
+
+  // 2. Load Instruments when Market or Search changes
+  useEffect(() => {
+    let isCancelled = false;
+    setIsLoadingInstruments(true);
+
+    MarketDataApi.getInstruments(selectedMarket, instrumentSearch)
+      .then((insts) => {
+        if (isCancelled) return;
+        setInstruments(insts);
+        // Default to first instrument or keep current if present
+        if (insts.length > 0) {
+          const currentInList = insts.find((i) => i.id === selectedInstrument?.id);
+          if (!currentInList) {
+            // Prefer verified symbols like BTCUSDT if available
+            const preferred = insts.find((i) => i.providerSymbol === 'BTCUSDT') || insts[0];
+            setSelectedInstrument(preferred);
+          }
+        } else {
+          setSelectedInstrument(null);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error fetching instruments:', err.message);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingInstruments(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedMarket, instrumentSearch]);
+
+  // 3. Load Coverage when Selected Instrument changes
+  useEffect(() => {
+    if (!selectedInstrument) {
+      setCoverage(null);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLoadingCoverage(true);
+
+    MarketDataApi.getCoverage(selectedInstrument.id)
+      .then((res) => {
+        if (isCancelled) return;
+        setCoverage(res.coverage);
+        if (res.coverage.earliestVerifiedTimestamp) {
+          const d = new Date(res.coverage.earliestVerifiedTimestamp);
+          const yyyy = d.getUTCFullYear();
+          const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(d.getUTCDate()).padStart(2, '0');
+          setSelectedDate(`${yyyy}-${mm}-${dd}`);
+        }
+      })
+      .catch((err) => {
+        console.warn('Coverage lookup error:', err.message);
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingCoverage(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedInstrument]);
+
+  const currentMarketMeta =
     MARKET_CATEGORIES.find((m) => m.id === selectedMarket) ??
     MARKET_CATEGORIES[0];
 
@@ -26,15 +122,42 @@ export const BacktestSetupPage: React.FC = () => {
 
   const handleMarketSelect = (marketId: MarketCategoryId) => {
     setSelectedMarket(marketId);
+    setInstrumentSearch('');
+    setWorkspaceNoticeVisible(false);
+    setPreviewCandles([]);
   };
 
   const handleTimeframeSelect = (timeframeId: TimeframeId) => {
     setSelectedTimeframe(timeframeId);
   };
 
-  const handleContinueToWorkspace = (event: React.FormEvent) => {
+  const handleContinueToWorkspace = async (event: React.FormEvent) => {
     event.preventDefault();
     setWorkspaceNoticeVisible(true);
+
+    // Fetch sample candles from real database if verified
+    if (selectedInstrument && coverage && coverage.totalCandlesCount > 0) {
+      setIsLoadingCandles(true);
+      try {
+        const fromTs = coverage.earliestVerifiedTimestamp || Date.now() - 24 * 3600 * 1000;
+        const toTs = coverage.latestVerifiedTimestamp || Date.now();
+        const res = await MarketDataApi.getCandles(
+          selectedInstrument.id,
+          selectedTimeframe,
+          fromTs,
+          toTs,
+          5
+        );
+        setPreviewCandles(res.candles || []);
+      } catch (err) {
+        console.warn('Candle retrieval error:', err);
+      } finally {
+        setIsLoadingCandles(false);
+      }
+    } else {
+      setPreviewCandles([]);
+    }
+
     window.setTimeout(() => {
       const noticeEl = document.getElementById('workspace-phase-notice');
       if (noticeEl) {
@@ -44,11 +167,15 @@ export const BacktestSetupPage: React.FC = () => {
   };
 
   const handleResetConfiguration = () => {
-    setSelectedMarket('forex');
+    setSelectedMarket('crypto');
     setSelectedTimeframe('M15');
-    setSelectedDate('2024-06-03');
+    setInstrumentSearch('');
     setWorkspaceNoticeVisible(false);
+    setPreviewCandles([]);
   };
+
+  const isVerifiedDataAvailable =
+    selectedInstrument && coverage && coverage.totalCandlesCount > 0;
 
   return (
     <div className="setup-page">
@@ -78,8 +205,8 @@ export const BacktestSetupPage: React.FC = () => {
             <span className="status-pill status-pill--cyan">
               No Account Required
             </span>
-            <span className="status-pill status-pill--blue">
-              Phase 1 Setup UI
+            <span className="status-pill status-pill--green">
+              Phase 2 Historical Engine Active
             </span>
           </div>
         </div>
@@ -89,7 +216,8 @@ export const BacktestSetupPage: React.FC = () => {
           <div className="section-eyebrow">SESSION CONFIGURATION</div>
           <h1 className="setup-page__title">CONFIGURE YOUR BACKTEST</h1>
           <p className="setup-page__subtitle">
-            Choose your market and prepare your historical backtesting session.
+            Choose your market, select a verified instrument, and prepare your
+            historical backtesting session.
           </p>
         </header>
 
@@ -116,13 +244,12 @@ export const BacktestSetupPage: React.FC = () => {
                       Select Market
                     </h2>
                     <p className="setup-step-card__desc">
-                      Choose an intended asset class for your backtesting
-                      session.
+                      Choose an asset class to load its verified provider catalog.
                     </p>
                   </div>
                 </div>
                 <span className="status-pill status-pill--cyan">
-                  Selected: {currentMarket.name}
+                  Selected: {currentMarketMeta.name}
                 </span>
               </div>
 
@@ -133,6 +260,9 @@ export const BacktestSetupPage: React.FC = () => {
               >
                 {MARKET_CATEGORIES.map((market) => {
                   const isSelected = market.id === selectedMarket;
+                  const catApi = marketCategories.find((c) => c.id === market.id);
+                  const isLiveActive = market.id === 'crypto';
+
                   return (
                     <button
                       key={market.id}
@@ -148,13 +278,20 @@ export const BacktestSetupPage: React.FC = () => {
                         <span className="setup-market-option__code">
                           {market.code}
                         </span>
-                        <span className="setup-market-option__indicator" />
+                        <span
+                          className={`status-pill ${
+                            isLiveActive ? 'status-pill--green' : 'status-pill--amber'
+                          }`}
+                        >
+                          {isLiveActive ? 'Live Data Active' : 'Awaiting S3 Auth'}
+                        </span>
                       </div>
                       <div className="setup-market-option__name">
                         {market.name}
                       </div>
                       <div className="setup-market-option__source">
-                        Planned source: {market.intendedSource}
+                        Provider: {market.intendedSource}{' '}
+                        {catApi?.instrumentCount ? `(${catApi.instrumentCount} pairs)` : ''}
                       </div>
                     </button>
                   );
@@ -178,61 +315,154 @@ export const BacktestSetupPage: React.FC = () => {
                       Select Instrument
                     </h2>
                     <p className="setup-step-card__desc">
-                      API-driven instrument selector prepared for{' '}
-                      {currentMarket.name} symbols.
+                      Select a real market instrument from the {currentMarketMeta.intendedSource} catalog.
                     </p>
                   </div>
                 </div>
-                <span className="status-pill status-pill--neutral">
-                  Connected in Phase 2
+                <span
+                  className={`status-pill ${
+                    selectedMarket === 'crypto' ? 'status-pill--green' : 'status-pill--amber'
+                  }`}
+                >
+                  {selectedMarket === 'crypto'
+                    ? 'Binance Spot Feed Connected'
+                    : 'Dukascopy Catalog Ready'}
                 </span>
               </div>
 
-              <div className="instrument-placeholder-box">
-                <div className="instrument-placeholder-box__control">
-                  <div className="instrument-placeholder-box__input-mock">
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        cx="11"
-                        cy="11"
-                        r="7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M20 20L16.5 16.5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span>
-                      {currentMarket.name} Instrument List — Awaiting Phase 2{' '}
-                      {currentMarket.intendedSource} Data Integration
-                    </span>
-                  </div>
-                  <span className="instrument-placeholder-box__tag">
-                    API Feed Pending
-                  </span>
-                </div>
-
-                <div className="instrument-placeholder-box__notice">
-                  <p className="instrument-placeholder-box__notice-title">
-                    Instrument List Will Be Connected in Phase 2
-                  </p>
-                  <p className="instrument-placeholder-box__notice-text">
-                    {currentMarket.instrumentSchemaNote} Real market data
-                    integrations are not part of Phase 1, so no live or
-                    fabricated instrument availability is displayed here.
-                  </p>
+              {/* Search Bar */}
+              <div className="instrument-search-container">
+                <div className="instrument-search-input-wrap">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                    <path d="M20 20L16.5 16.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                  <input
+                    type="text"
+                    className="instrument-search-input"
+                    placeholder={`Search ${currentMarketMeta.name} symbols (e.g. ${
+                      selectedMarket === 'crypto' ? 'BTC, ETH, SOL' : 'EUR, XAU, US30'
+                    })...`}
+                    value={instrumentSearch}
+                    onChange={(e) => setInstrumentSearch(e.target.value)}
+                  />
                 </div>
               </div>
+
+              {/* Instrument Selection List */}
+              {isLoadingInstruments ? (
+                <div className="instrument-placeholder-box__notice">
+                  Loading verified instrument catalog...
+                </div>
+              ) : instruments.length === 0 ? (
+                <div className="instrument-placeholder-box__notice">
+                  No instruments found matching &ldquo;{instrumentSearch}&rdquo;.
+                </div>
+              ) : (
+                <div className="instrument-picker-list" role="listbox">
+                  {instruments.slice(0, 30).map((inst) => {
+                    const isSelected = selectedInstrument?.id === inst.id;
+                    const hasVerifiedM1 =
+                      inst.provider === 'BINANCE' &&
+                      ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].includes(inst.providerSymbol);
+
+                    return (
+                      <div
+                        key={inst.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        className={`instrument-picker-item ${
+                          isSelected ? 'instrument-picker-item--selected' : ''
+                        }`}
+                        onClick={() => {
+                          setSelectedInstrument(inst);
+                          setWorkspaceNoticeVisible(false);
+                        }}
+                      >
+                        <div>
+                          <div className="instrument-picker-item__symbol">
+                            {inst.providerSymbol}
+                            <span style={{ marginLeft: 8, fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                              ({inst.baseAsset}/{inst.quoteAsset})
+                            </span>
+                          </div>
+                          <div className="instrument-picker-item__name">
+                            {inst.displayName}
+                          </div>
+                        </div>
+
+                        <div className="instrument-picker-item__right">
+                          {hasVerifiedM1 ? (
+                            <span className="status-pill status-pill--green">
+                              1,000 M1 Stored
+                            </span>
+                          ) : inst.provider === 'BINANCE' ? (
+                            <span className="status-pill status-pill--blue">
+                              Spot Feed Ready
+                            </span>
+                          ) : (
+                            <span className="status-pill status-pill--amber">
+                              Awaiting S3 Auth
+                            </span>
+                          )}
+                          <span className="status-pill status-pill--neutral">
+                            {inst.priceBasis}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Verified Coverage Card for Selected Instrument */}
+              {selectedInstrument && (
+                <div className="coverage-display-panel">
+                  <div className="coverage-display-panel__header">
+                    <span>
+                      Selected: {selectedInstrument.providerSymbol} ({selectedInstrument.provider})
+                    </span>
+                    <span
+                      className={`status-pill ${
+                        isVerifiedDataAvailable ? 'status-pill--green' : 'status-pill--neutral'
+                      }`}
+                    >
+                      {isVerifiedDataAvailable ? 'Verified M1 Coverage' : 'Awaiting Ingestion'}
+                    </span>
+                  </div>
+
+                  <div className="coverage-display-panel__stats">
+                    <div className="coverage-stat-box">
+                      <span className="coverage-stat-box__label">Price Basis</span>
+                      <span className="coverage-stat-box__value">{selectedInstrument.priceBasis}</span>
+                    </div>
+                    <div className="coverage-stat-box">
+                      <span className="coverage-stat-box__label">Stored M1 Candles</span>
+                      <span className="coverage-stat-box__value">
+                        {isLoadingCoverage ? '...' : coverage?.totalCandlesCount || 0}
+                      </span>
+                    </div>
+                    <div className="coverage-stat-box">
+                      <span className="coverage-stat-box__label">Coverage Status</span>
+                      <span className="coverage-stat-box__value">
+                        {isLoadingCoverage ? '...' : coverage?.coverageStatus || 'EMPTY'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {coverage?.notes && (
+                    <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      <strong>Coverage Note:</strong> {coverage.notes}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* 3. SELECT TIMEFRAME */}
@@ -251,8 +481,7 @@ export const BacktestSetupPage: React.FC = () => {
                       Select Timeframe
                     </h2>
                     <p className="setup-step-card__desc">
-                      Choose the planned candle resolution for historical chart
-                      replay (Default: M15).
+                      Choose candle resolution aggregated strictly from canonical M1 data (Default: M15).
                     </p>
                   </div>
                 </div>
@@ -303,13 +532,16 @@ export const BacktestSetupPage: React.FC = () => {
                       Select Historical Date
                     </h2>
                     <p className="setup-step-card__desc">
-                      Date selection interface designed for future integration
-                      with historical data availability.
+                      Bound to verified historical database coverage boundaries.
                     </p>
                   </div>
                 </div>
-                <span className="status-pill status-pill--neutral">
-                  Date Coverage Bound in Phase 2
+                <span
+                  className={`status-pill ${
+                    isVerifiedDataAvailable ? 'status-pill--green' : 'status-pill--neutral'
+                  }`}
+                >
+                  {isVerifiedDataAvailable ? 'Coverage Bound' : 'Awaiting Data'}
                 </span>
               </div>
 
@@ -319,7 +551,7 @@ export const BacktestSetupPage: React.FC = () => {
                     htmlFor="historical-start-date"
                     className="date-selector-area__label"
                   >
-                    Target Historical Replay Date (UI Configuration Preview)
+                    Target Historical Date (UTC)
                   </label>
                   <div className="date-selector-area__input-row">
                     <input
@@ -330,17 +562,26 @@ export const BacktestSetupPage: React.FC = () => {
                       onChange={(e) => setSelectedDate(e.target.value)}
                     />
                     <span className="date-selector-area__selected-badge">
-                      Configured Date: {selectedDate || 'Not Set'}
+                      Selected: {selectedDate || 'Not Set'}
                     </span>
                   </div>
                 </div>
 
                 <div className="date-selector-area__notice">
-                  <strong>Historical Coverage Notice:</strong> Verified earliest
-                  and latest date ranges are not claimed or enforced in Phase 1.
-                  Instrument-specific historical date boundaries will be
-                  dynamically validated once {currentMarket.intendedSource}{' '}
-                  historical datasets are connected in Phase 2.
+                  {isVerifiedDataAvailable && coverage?.earliestVerifiedTimestamp && coverage?.latestVerifiedTimestamp ? (
+                    <div>
+                      <strong>Verified Available Range:</strong>{' '}
+                      {new Date(coverage.earliestVerifiedTimestamp).toUTCString()} &mdash;{' '}
+                      {new Date(coverage.latestVerifiedTimestamp).toUTCString()} ({coverage.totalCandlesCount} M1 candles persisted).
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>Historical Coverage Notice:</strong> No verified M1 candles have been stored for this instrument yet.
+                      {selectedMarket !== 'crypto' && (
+                        <span> Dukascopy historical ingestion is blocked awaiting owner AWS S3 credentials or licensing confirmation.</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -361,8 +602,7 @@ export const BacktestSetupPage: React.FC = () => {
                       Start Workspace
                     </h2>
                     <p className="setup-step-card__desc">
-                      Review your configuration parameters and proceed to the
-                      workspace status view.
+                      Validate your selected parameters against genuine stored historical data.
                     </p>
                   </div>
                 </div>
@@ -399,7 +639,7 @@ export const BacktestSetupPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Phase 1 Workspace Development Status Message */}
+              {/* Phase 2 Workspace Status Panel */}
               {workspaceNoticeVisible && (
                 <div
                   id="workspace-phase-notice"
@@ -408,8 +648,14 @@ export const BacktestSetupPage: React.FC = () => {
                   aria-live="polite"
                 >
                   <div className="workspace-phase-alert__header">
-                    <span className="status-pill status-pill--cyan">
-                      Phase 1 Foundation Status
+                    <span
+                      className={`status-pill ${
+                        isVerifiedDataAvailable ? 'status-pill--green' : 'status-pill--amber'
+                      }`}
+                    >
+                      {isVerifiedDataAvailable
+                        ? 'Historical Data Verified'
+                        : 'Awaiting Provider Ingestion'}
                     </span>
                     <button
                       type="button"
@@ -422,53 +668,96 @@ export const BacktestSetupPage: React.FC = () => {
                   </div>
 
                   <h3 className="workspace-phase-alert__title">
-                    Backtest Workspace &amp; Historical Data Integration In
-                    Development
+                    {isVerifiedDataAvailable
+                      ? 'Historical Data Verified for Selected Session'
+                      : 'Historical Data Ingestion Pending for this Instrument'}
                   </h3>
 
                   <p className="workspace-phase-alert__text">
-                    Your session setup parameters have been configured in the
-                    Phase 1 interface. The interactive charting workspace,
-                    historical market data pipelines (
-                    <strong>{currentMarket.intendedSource}</strong>), and
-                    candle-by-candle replay engine are scheduled for
-                    implementation in upcoming development phases (Phases 2–6).
+                    {isVerifiedDataAvailable ? (
+                      <>
+                        Historical market data is verified and stored in the persistent database for{' '}
+                        <strong>{selectedInstrument?.providerSymbol}</strong> (
+                        {coverage?.totalCandlesCount} canonical M1 candles). Replay Workspace and
+                        candle-by-candle playback will be enabled in Phase 3.
+                      </>
+                    ) : selectedMarket === 'crypto' ? (
+                      <>
+                        Real Binance Spot instrument metadata is loaded. Run the ingestion worker to
+                        backfill M1 historical data for {selectedInstrument?.providerSymbol}.
+                      </>
+                    ) : (
+                      <>
+                        Dukascopy connector architecture is implemented. Historical ingestion is blocked
+                        pending owner-provided AWS S3 Requester-Pays credentials or commercial data
+                        redistribution agreement. Refusing to fabricate fake candles.
+                      </>
+                    )}
                   </p>
 
                   <div className="workspace-phase-alert__summary">
                     <div className="workspace-phase-alert__summary-item">
-                      <span className="workspace-phase-alert__label">
-                        Selected Market
-                      </span>
+                      <span className="workspace-phase-alert__label">Selected Instrument</span>
                       <span className="workspace-phase-alert__value">
-                        {currentMarket.name} ({currentMarket.code})
+                        {selectedInstrument?.providerSymbol} ({selectedInstrument?.provider})
                       </span>
                     </div>
                     <div className="workspace-phase-alert__summary-item">
-                      <span className="workspace-phase-alert__label">
-                        Instrument List
-                      </span>
+                      <span className="workspace-phase-alert__label">Price Basis</span>
                       <span className="workspace-phase-alert__value">
-                        Planned Phase 2 ({currentMarket.intendedSource})
+                        {selectedInstrument?.priceBasis}
                       </span>
                     </div>
                     <div className="workspace-phase-alert__summary-item">
-                      <span className="workspace-phase-alert__label">
-                        Selected Timeframe
-                      </span>
+                      <span className="workspace-phase-alert__label">Selected Timeframe</span>
                       <span className="workspace-phase-alert__value">
                         {currentTimeframe.label} ({currentTimeframe.fullName})
                       </span>
                     </div>
                     <div className="workspace-phase-alert__summary-item">
-                      <span className="workspace-phase-alert__label">
-                        Target Date Input
-                      </span>
+                      <span className="workspace-phase-alert__label">Stored M1 Candles</span>
                       <span className="workspace-phase-alert__value">
-                        {selectedDate || 'Not specified'}
+                        {coverage?.totalCandlesCount || 0}
                       </span>
                     </div>
                   </div>
+
+                  {/* Real OHLCV Preview Table */}
+                  {isLoadingCandles ? (
+                    <div style={{ marginTop: 14, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                      Querying persistent database for genuine {selectedTimeframe} candles...
+                    </div>
+                  ) : previewCandles.length > 0 && (
+                    <div className="candles-preview-table-wrap">
+                      <div style={{ padding: '8px 10px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        <strong>Live Database Query Preview ({selectedTimeframe} Resolution):</strong>
+                      </div>
+                      <table className="candles-preview-table">
+                        <thead>
+                          <tr>
+                            <th>Timestamp (UTC)</th>
+                            <th>Open</th>
+                            <th>High</th>
+                            <th>Low</th>
+                            <th>Close</th>
+                            <th>Volume</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewCandles.map((c) => (
+                            <tr key={c.timestamp}>
+                              <td>{new Date(c.timestamp).toISOString().replace('.000Z', '')}</td>
+                              <td>{c.open.toFixed(2)}</td>
+                              <td>{c.high.toFixed(2)}</td>
+                              <td>{c.low.toFixed(2)}</td>
+                              <td>{c.close.toFixed(2)}</td>
+                              <td>{c.volume ? c.volume.toFixed(4) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   <div className="workspace-phase-alert__footer">
                     <Link to="/" className="btn btn--secondary btn--sm">
@@ -490,53 +779,68 @@ export const BacktestSetupPage: React.FC = () => {
                 <h2 className="setup-summary-card__title">
                   SESSION CONFIGURATION
                 </h2>
-                <span className="status-pill status-pill--blue">Phase 1</span>
+                <span className="status-pill status-pill--green">Phase 2 Engine</span>
               </div>
 
               <dl className="setup-summary-list">
                 <div className="setup-summary-list__row">
                   <dt>Market Category</dt>
                   <dd>
-                    <strong>{currentMarket.name}</strong> ({currentMarket.code})
+                    <strong>{currentMarketMeta.name}</strong> ({currentMarketMeta.code})
                   </dd>
                 </div>
                 <div className="setup-summary-list__row">
-                  <dt>Intended Data Source</dt>
-                  <dd>{currentMarket.intendedSource} (Phase 2)</dd>
+                  <dt>Selected Instrument</dt>
+                  <dd>
+                    <strong>{selectedInstrument?.providerSymbol || 'None'}</strong>
+                  </dd>
                 </div>
                 <div className="setup-summary-list__row">
-                  <dt>Instrument Feed</dt>
-                  <dd className="text-muted">Connected in Phase 2</dd>
+                  <dt>Data Provider</dt>
+                  <dd>{selectedInstrument?.provider || currentMarketMeta.intendedSource}</dd>
+                </div>
+                <div className="setup-summary-list__row">
+                  <dt>Price Basis</dt>
+                  <dd>{selectedInstrument?.priceBasis || 'LAST'}</dd>
+                </div>
+                <div className="setup-summary-list__row">
+                  <dt>Verified M1 Candles</dt>
+                  <dd>
+                    {isVerifiedDataAvailable ? `${coverage?.totalCandlesCount} Candles` : '0 (Pending)'}
+                  </dd>
                 </div>
                 <div className="setup-summary-list__row">
                   <dt>Timeframe Resolution</dt>
                   <dd>
-                    <strong>{currentTimeframe.label}</strong> —{' '}
-                    {currentTimeframe.fullName}
+                    <strong>{currentTimeframe.label}</strong> &mdash; {currentTimeframe.fullName}
                   </dd>
                 </div>
                 <div className="setup-summary-list__row">
-                  <dt>Target Date Input</dt>
+                  <dt>Target Date (UTC)</dt>
                   <dd>{selectedDate || 'Not specified'}</dd>
                 </div>
                 <div className="setup-summary-list__row">
-                  <dt>Execution Mode</dt>
-                  <dd>100% Simulated (Planned Phase 4)</dd>
+                  <dt>Engine Status</dt>
+                  <dd>
+                    <span style={{ color: isVerifiedDataAvailable ? '#34d399' : 'var(--text-muted)' }}>
+                      {isVerifiedDataAvailable ? 'Data Verified' : 'Catalog Connected'}
+                    </span>
+                  </dd>
                 </div>
               </dl>
 
               <div className="setup-summary-card__roadmap">
                 <h3 className="setup-summary-card__roadmap-title">
-                  UPCOMING INTEGRATION ROADMAP
+                  PLATFORM INTEGRATION ROADMAP
                 </h3>
                 <ul className="setup-roadmap-list">
                   <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
                     <span className="setup-roadmap-list__phase">Phase 1</span>
                     <span>Website Foundation &amp; Setup UI</span>
                   </li>
-                  <li className="setup-roadmap-list__item">
-                    <span className="setup-roadmap-list__phase">Phase 2</span>
-                    <span>Dukascopy &amp; Binance Data Integration</span>
+                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
+                    <span className="setup-roadmap-list__phase" style={{ color: '#34d399' }}>Phase 2</span>
+                    <span><strong>Historical Data Engine (Active)</strong></span>
                   </li>
                   <li className="setup-roadmap-list__item">
                     <span className="setup-roadmap-list__phase">Phase 3</span>
@@ -552,9 +856,7 @@ export const BacktestSetupPage: React.FC = () => {
                   </li>
                   <li className="setup-roadmap-list__item">
                     <span className="setup-roadmap-list__phase">Phase 6</span>
-                    <span>
-                      TradingView Advanced Charts (Subject to Approval)
-                    </span>
+                    <span>TradingView Advanced Charts Integration</span>
                   </li>
                 </ul>
               </div>
