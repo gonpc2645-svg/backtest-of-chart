@@ -24,9 +24,9 @@ export const MARKET_CATEGORIES: MarketCategory[] = [
     description:
       'Major, minor, and cross currency pairs planned for historical price replay and multi-session structure study.',
     intendedSource: 'Dukascopy',
-    statusLabel: 'Intended Market — Phase 2 Integration',
+    statusLabel: 'Dukascopy Catalog Connected (Awaiting AWS S3 Credentials)',
     instrumentSchemaNote:
-      'Currency pair symbol directory (Dukascopy historical feed) is scheduled for connection in Phase 2.',
+      'Canonical currency pair symbol directory (Dukascopy historical feed) connected with Bid price basis.',
   },
   {
     id: 'metals',
@@ -35,9 +35,9 @@ export const MARKET_CATEGORIES: MarketCategory[] = [
     description:
       'Precious metals spot instruments intended for studying historical volatility, liquidity sweeps, and session trends.',
     intendedSource: 'Dukascopy',
-    statusLabel: 'Intended Market — Phase 2 Integration',
+    statusLabel: 'Dukascopy Catalog Connected (Awaiting AWS S3 Credentials)',
     instrumentSchemaNote:
-      'Spot metals symbol catalogue (Dukascopy historical feed) is scheduled for connection in Phase 2.',
+      'Canonical spot metals symbol catalog (XAU, XAG, XPT) connected with Bid price basis.',
   },
   {
     id: 'indices',
@@ -46,9 +46,9 @@ export const MARKET_CATEGORIES: MarketCategory[] = [
     description:
       'Global equity index instruments planned for analysing market open behaviour, session momentum, and structural levels.',
     intendedSource: 'Dukascopy',
-    statusLabel: 'Intended Market — Phase 2 Integration',
+    statusLabel: 'Dukascopy Catalog Connected (Awaiting AWS S3 Credentials)',
     instrumentSchemaNote:
-      'Global index symbol catalogue (Dukascopy historical feed) is scheduled for connection in Phase 2.',
+      'Canonical global index symbol catalog (US30, SPX, NAS, DAX) connected with Bid price basis.',
   },
   {
     id: 'crypto',
@@ -57,9 +57,9 @@ export const MARKET_CATEGORIES: MarketCategory[] = [
     description:
       'Digital asset pairs intended for continuous 24/7 historical Kline replay and multi-timeframe market analysis.',
     intendedSource: 'Binance',
-    statusLabel: 'Intended Market — Phase 2 Integration',
+    statusLabel: 'Binance Spot Feed Connected (Verified M1 Ingestion)',
     instrumentSchemaNote:
-      'Cryptocurrency historical Kline symbol list (Binance feed) is scheduled for connection in Phase 2.',
+      'Cryptocurrency historical Kline pipeline (Binance public Spot REST feed) connected with verified M1 data.',
   },
 ];
 
@@ -77,8 +77,8 @@ export const PLANNED_FEATURES: FeatureItem[] = [
   {
     id: 'historical-market-replay',
     title: 'Historical Market Replay',
-    phaseBadge: 'Planned Capability — Phase 3',
-    statusNote: 'Engine in development (Not active in Phase 1)',
+    phaseBadge: 'Phase 3 — Operational',
+    statusNote: 'Deterministic M1 Replay Engine Active',
     description:
       'Step through historical price action candle by candle at controlled speeds to observe how market structures unfold without hindsight bias.',
     highlights: [
@@ -90,21 +90,21 @@ export const PLANNED_FEATURES: FeatureItem[] = [
   {
     id: 'advanced-chart-analysis',
     title: 'Advanced Chart Analysis',
-    phaseBadge: 'Planned Capability — Phase 6',
-    statusNote: 'Subject to charting integration & licensing approval',
+    phaseBadge: 'Phase 6 — Adapter Ready',
+    statusNote: 'Lightweight Charts Active (Advanced Charts Adapter Ready)',
     description:
       'Inspect multi-timeframe price behaviour in a structured charting workspace designed for technical study and price action evaluation.',
     highlights: [
       'Multi-timeframe switching (M1 through D1)',
       'Clean dark-terminal visual hierarchy',
-      'Designed for future TradingView Advanced Charts integration (subject to approval)',
+      'Official TradingView custom datafeed prepared (subject to license approval)',
     ],
   },
   {
     id: 'simulated-trading',
     title: 'Simulated Trading',
-    phaseBadge: 'Planned Capability — Phase 4',
-    statusNote: 'Simulation engine planned (Not active in Phase 1)',
+    phaseBadge: 'Phase 4 — Operational',
+    statusNote: 'Market & Pending Orders with Hedging Active',
     description:
       'Practise executing simulated market and pending decisions during historical replay in a risk-free educational environment.',
     highlights: [
@@ -116,40 +116,40 @@ export const PLANNED_FEATURES: FeatureItem[] = [
   {
     id: 'risk-management',
     title: 'Risk Management',
-    phaseBadge: 'Planned Capability — Phase 4',
-    statusNote: 'Risk calculation engine planned (Not active in Phase 1)',
+    phaseBadge: 'Phase 4 — Operational',
+    statusNote: 'Margin Tracking, Stop-Loss & 50% Stop-Out Active',
     description:
       'Define stop-loss, take-profit, and position sizing parameters before entering simulated setups to build disciplined risk habits.',
     highlights: [
       'Pre-trade risk-to-reward structuring',
-      'Stop-loss and target level definition',
-      'Consistent position sizing discipline',
+      'Conservative same-candle SL/TP ambiguity resolution',
+      'Automated 50% margin stop-out liquidation guard',
     ],
   },
   {
     id: 'trade-history',
     title: 'Trade History',
-    phaseBadge: 'Planned Capability — Phase 4 & 5',
-    statusNote: 'Session log module planned (Not active in Phase 1)',
+    phaseBadge: 'Phase 4 & 5 — Operational',
+    statusNote: 'Immutable Event Ledger & Trade History Active',
     description:
       'Review a chronological ledger of every simulated trade taken during your backtesting session, including entry, exit, and outcome details.',
     highlights: [
       'Complete chronological log of simulated trades',
       'Entry and exit timestamp auditing',
-      'Review individual trade execution decisions',
+      'Search, filter, and pagination across all records',
     ],
   },
   {
     id: 'performance-analytics',
     title: 'Performance Analytics',
-    phaseBadge: 'Planned Capability — Phase 5',
-    statusNote: 'Analytics module planned (Not active in Phase 1)',
+    phaseBadge: 'Phase 5 — Operational',
+    statusNote: 'Comprehensive Statistical & Drawdown Engine Active',
     description:
       'Evaluate your simulated session results through objective statistical metrics to identify strengths and recurring execution errors.',
     highlights: [
-      'Win/loss distribution & expectancy overview',
-      'Drawdown and consistency observation',
-      'Educational review of strategy behaviour',
+      'Win rate, profit factor & expectancy metrics',
+      'SVG Balance & Underwater Drawdown curves',
+      'One-click CSV & JSON report export',
     ],
   },
 ];
@@ -159,23 +159,23 @@ export const DATA_SOURCES: DataSourceItem[] = [
     id: 'dukascopy',
     name: 'Dukascopy',
     wordmarkStyle: 'DUKASCOPY',
-    statusBadge: 'Planned Integration — Phase 2',
+    statusBadge: 'Catalog Connected • S3 Ingestion Pending Credentials',
     intendedMarkets: ['Forex', 'Metals', 'Indices'],
     description:
-      'Intended source for Forex, Metals, and Indices historical data.',
+      'Historical catalog source for Forex, Metals, and Indices data.',
     technicalScope:
-      'Neither provider is connected in Phase 1. Historical price feeds, symbol lists, and verified date ranges will be connected during Phase 2 backend integration.',
+      'Dukascopy historical catalog (19 canonical pairs across Forex, Metals, Indices) is connected with Bid price basis. Automated bulk M1 ingestion from Requester-Pays S3 bucket (s3://cfg-public-proper-wallaby) requires owner AWS S3 credentials and commercial redistribution license confirmation.',
   },
   {
     id: 'binance',
     name: 'Binance',
     wordmarkStyle: 'BINANCE',
-    statusBadge: 'Planned Integration — Phase 2',
+    statusBadge: 'Verified Live Historical Data Active',
     intendedMarkets: ['Cryptocurrency'],
     description:
-      'Intended source for Cryptocurrency historical Klines.',
+      'Historical Kline data source for Cryptocurrency pairs.',
     technicalScope:
-      'Neither provider is connected in Phase 1. Historical Kline pipelines and cryptocurrency pair lists will be connected during Phase 2 backend integration.',
+      'Binance official Spot public Kline REST API connected and operational. Normalized M1 historical data stored in persistent SQLite database with strict Last-Traded price basis and zero future data leakage.',
   },
 ];
 
@@ -185,15 +185,15 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
     title: 'Open Backtest',
     description:
       'Launch the Backtest Setup interface directly from the homepage with no account registration, login wall, or subscription required.',
-    phaseAvailability: 'Available in Phase 1 UI',
+    phaseAvailability: 'Phase 1 — Operational',
     isAvailableInPhase1: true,
   },
   {
     stepNumber: '02',
     title: 'Select a market and instrument',
     description:
-      'Choose your target asset class (Forex, Metals, Indices, or Cryptocurrency) and select an instrument once historical symbol feeds are connected.',
-    phaseAvailability: 'Market Selector UI Ready • Instrument Feed in Phase 2',
+      'Choose your target asset class (Forex, Metals, Indices, or Cryptocurrency) and select a real historical instrument.',
+    phaseAvailability: 'Phase 2 — Operational',
     isAvailableInPhase1: true,
   },
   {
@@ -201,7 +201,7 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
     title: 'Choose a timeframe and historical date',
     description:
       'Configure your chart resolution (M1 to D1, defaulting to M15) and specify the historical starting date for your session.',
-    phaseAvailability: 'Selector UI Ready • Date Coverage Bound in Phase 2',
+    phaseAvailability: 'Phase 2 & 3 — Operational',
     isAvailableInPhase1: true,
   },
   {
@@ -209,24 +209,24 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
     title: 'Start historical replay',
     description:
       'Load the historical workspace and advance through market candles step by step to observe price action as it developed.',
-    phaseAvailability: 'Planned — Phase 3 Replay Engine',
-    isAvailableInPhase1: false,
+    phaseAvailability: 'Phase 3 — Operational',
+    isAvailableInPhase1: true,
   },
   {
     stepNumber: '05',
     title: 'Practise simulated trading',
     description:
       'Test your market entries, exits, and risk management rules in a purely simulated environment without risking real capital.',
-    phaseAvailability: 'Planned — Phase 4 Trading & Risk Engine',
-    isAvailableInPhase1: false,
+    phaseAvailability: 'Phase 4 — Operational',
+    isAvailableInPhase1: true,
   },
   {
     stepNumber: '06',
     title: 'Review performance',
     description:
-      'Inspect your simulated trade history and session analytics to study decision quality and trading consistency.',
-    phaseAvailability: 'Planned — Phase 5 Analytics Engine',
-    isAvailableInPhase1: false,
+      'Inspect your simulated trade history, equity curve, and session analytics to study decision quality and trading consistency.',
+    phaseAvailability: 'Phase 5 — Operational',
+    isAvailableInPhase1: true,
   },
 ];
 

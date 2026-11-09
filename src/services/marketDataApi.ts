@@ -74,7 +74,8 @@ export interface ApiCandle {
 
 export class MarketDataApi {
   private static async request<T>(endpoint: string): Promise<T> {
-    const res = await fetch(endpoint, {
+    const baseUrl = typeof window === 'undefined' ? (process.env.API_BASE_URL || 'http://localhost:3001') : '';
+    const res = await fetch(baseUrl + endpoint, {
       headers: {
         'Accept': 'application/json',
       },
@@ -141,5 +142,70 @@ export class MarketDataApi {
       m1CandlesRetrieved: number;
       coverage: ApiCoverage | null;
     }>(`/api/market-data/candles?${params.toString()}`);
+  }
+
+  public static async initReplaySession(params: {
+    instrumentId: string;
+    timeframe: string;
+    startTimestamp: number;
+    endTimestamp: number;
+    contextBarsCount?: number;
+  }): Promise<{
+    instrument: ApiMarketInstrument;
+    timeframe: string;
+    startTimestamp: number;
+    endTimestamp: number;
+    initialCursor: number;
+    contextBarsCount: number;
+    initialContextCandles: ApiCandle[];
+    availableM1CountInRange: number;
+    coverage: ApiCoverage;
+  }> {
+    const baseUrl = typeof window === 'undefined' ? (process.env.API_BASE_URL || 'http://localhost:3001') : '';
+    const res = await fetch(baseUrl + '/api/replay/initialize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`API error [${res.status}]: ${body || res.statusText}`);
+    }
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to initialize replay session');
+    }
+    return data;
+  }
+
+  public static async getReplayCandles(params: {
+    instrumentId: string;
+    from: number;
+    cursor: number;
+    limit?: number;
+  }): Promise<{
+    instrumentId: string;
+    fromTimestamp: number;
+    cursorTimestamp: number;
+    candleCount: number;
+    candles: ApiCandle[];
+  }> {
+    const q = new URLSearchParams({
+      instrument: params.instrumentId,
+      from: String(params.from),
+      cursor: String(params.cursor),
+      limit: String(params.limit || 2000),
+    });
+    return await this.request<{
+      success: boolean;
+      instrumentId: string;
+      fromTimestamp: number;
+      cursorTimestamp: number;
+      candleCount: number;
+      candles: ApiCandle[];
+    }>(`/api/replay/candles?${q.toString()}`);
   }
 }

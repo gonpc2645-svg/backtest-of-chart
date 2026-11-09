@@ -1,0 +1,567 @@
+/* ==========================================================================
+   BACKTEST OF CHART — PHASE 5 ANALYTICS & PERFORMANCE STYLES
+   Dark Trading Terminal Aesthetic | High-Contrast Financial Typography
+   ========================================================================== */
+
+.analytics-dashboard {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 120px);
+  background: var(--bg-primary, #0a0e14);
+  color: var(--text-primary, #e2e8f0);
+  padding: 1.5rem 2rem 3rem;
+  gap: 1.75rem;
+}
+
+/* 1. Header */
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-subtle, #1e293b);
+}
+
+.analytics-header__back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--accent-cyan, #22d3ee);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin-bottom: 0.75rem;
+}
+
+.analytics-header__back-btn:hover {
+  background: rgba(34, 211, 238, 0.16);
+  border-color: var(--accent-cyan, #22d3ee);
+}
+
+.analytics-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.analytics-header__title {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.analytics-header__badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.analytics-header__badge--status {
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.analytics-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-dim, #94a3b8);
+}
+
+.analytics-header__meta-item strong {
+  color: #cbd5e1;
+}
+
+.analytics-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.btn-analytics {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-analytics:hover {
+  background: #334155;
+  color: #fff;
+  border-color: #475569;
+}
+
+.btn-analytics--primary {
+  background: #0284c7;
+  color: #fff;
+  border-color: #38bdf8;
+}
+
+.btn-analytics--primary:hover {
+  background: #0369a1;
+}
+
+/* 2. Open Positions Live Alert Bar */
+.analytics-open-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid #334155;
+  border-left: 4px solid #38bdf8;
+  border-radius: 6px;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  gap: 1rem;
+}
+
+.analytics-open-alert__left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.analytics-open-alert__pnl {
+  font-weight: 700;
+}
+
+/* 3. Primary Metrics Grid */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.metric-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.2s ease;
+}
+
+.metric-card:hover {
+  border-color: #374151;
+}
+
+.metric-card__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+}
+
+.metric-card__value {
+  font-size: 1.375rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #f3f4f6;
+}
+
+.metric-card__value--profit {
+  color: #22d3ee;
+}
+
+.metric-card__value--loss {
+  color: #f43f5e;
+}
+
+.metric-card__sub {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* 4. Chart Section */
+.analytics-chart-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.analytics-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.analytics-chart-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.analytics-chart-tabs {
+  display: flex;
+  background: #1f2937;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.analytics-chart-tab {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.analytics-chart-tab.active {
+  background: #374151;
+  color: #fff;
+}
+
+.chart-svg-container {
+  width: 100%;
+  height: 280px;
+  position: relative;
+  user-select: none;
+}
+
+/* 5. Two Column Analytical Layout */
+.analytics-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 960px) {
+  .analytics-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-subcard {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.analytics-subcard__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  margin: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #1f2937;
+}
+
+.analytics-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.analytics-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0;
+}
+
+.analytics-stat-row__label {
+  color: #9ca3af;
+}
+
+.analytics-stat-row__val {
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: #e5e7eb;
+}
+
+/* 6. Long vs Short Table / Comparison */
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.comparison-box {
+  background: #1a2333;
+  border: 1px solid #283548;
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.comparison-box--long {
+  border-left: 3px solid #22d3ee;
+}
+
+.comparison-box--short {
+  border-left: 3px solid #f43f5e;
+}
+
+.comparison-box__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* 7. Trade History Table */
+.trade-table-wrapper {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.trade-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #151d2d;
+  border-bottom: 1px solid #1f2937;
+}
+
+.trade-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.trade-filter-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.trade-filter-btn.active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #fff;
+}
+
+.trade-search-input {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  outline: none;
+  min-width: 180px;
+}
+
+.trade-search-input:focus {
+  border-color: #38bdf8;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.analytics-table th {
+  background: #0f172a;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid #1e293b;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.analytics-table th:hover {
+  color: #f1f5f9;
+}
+
+.analytics-table td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.analytics-table tr:hover td {
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.table-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  background: #111827;
+  border-top: 1px solid #1f2937;
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+.pagination-btn {
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #e5e7eb;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 8. Histogram / Outcome Distribution Bins */
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.dist-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dist-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.dist-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #1f2937;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dist-bar-fill {
+  height: 100%;
+  background: #0284c7;
+  border-radius: 4px;
+}
+
+.dist-bar-fill--profit {
+  background: #22d3ee;
+}
+
+.dist-bar-fill--loss {
+  background: #f43f5e;
+}
+
+/* 9. Print Optimized Layout */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .skip-to-content,
+  .app-header,
+  .app-footer,
+  .analytics-header__actions,
+  .analytics-header__back-btn,
+  .trade-table-toolbar,
+  .table-pagination {
+    display: none !important;
+  }
+
+  .analytics-dashboard {
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .metric-card,
+  .analytics-chart-card,
+  .analytics-subcard,
+  .trade-table-wrapper {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .metric-card__value,
+  .analytics-chart-title,
+  .analytics-subcard__title {
+    color: #000 !important;
+  }
+
+  .analytics-table th,
+  .analytics-table td {
+    border-bottom: 1px solid #eee !important;
+    color: #111 !important;
+  }
+}

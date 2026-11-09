@@ -88,22 +88,19 @@ export const PrivacyPolicyPage: React.FC = () => {
             </section>
 
             <section className="legal-section">
-              <h2>4. Local Browser State</h2>
+              <h2>4. Client-Side Browser Storage (IndexedDB)</h2>
               <p>
-                The Platform may use temporary in-memory or local browser state
-                solely to remember your selected backtest setup preferences
-                (such as selected market category or timeframe) during your
-                active session.
+                To provide a 100% private and account-free backtesting experience, simulated trade history, account balances, orders, replay timeline states, and technical chart drawings are stored locally on your device using your browser&rsquo;s IndexedDB API.
+              </p>
+              <p>
+                This data remains entirely on your machine; it is never transmitted to our backend servers, never profiled, and never shared with third parties. Clearing your browser cookies and site storage will reset your locally stored backtest records unless exported to CSV or JSON.
               </p>
             </section>
 
             <section className="legal-section">
-              <h2>5. Third-Party Services &amp; Future Data Providers</h2>
+              <h2>5. Public Market Data Providers</h2>
               <p>
-                Historical market data integrations (planned for Dukascopy and
-                Binance in Phase 2) are not connected during Phase 1. When third-party
-                infrastructure is introduced in future phases, this Privacy
-                Policy should be updated accordingly.
+                Historical candle data is served from our independent server cache, which integrates public market endpoints (such as Binance Spot Kline endpoints and Dukascopy historical archives). When your browser loads historical price candles from our API, no personal identification or trading telemetry is shared with these external market providers.
               </p>
             </section>
 

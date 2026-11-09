@@ -408,4 +408,35 @@ export class DatabaseService {
       fileSizeBytes: size,
     };
   }
+
+  /**
+   * Safe online database backup using SQLite VACUUM INTO.
+   * Creates an atomic, non-blocking snapshot of the persistent SQLite database.
+   */
+  public backupDatabase(destinationPath?: string): {
+    success: boolean;
+    backupPath: string;
+    backupSizeBytes: number;
+    timestamp: number;
+  } {
+    const defaultBackupDir = path.resolve(path.dirname(CONFIG.DATABASE.SQLITE_PATH), 'backups');
+    if (!fs.existsSync(defaultBackupDir)) {
+      fs.mkdirSync(defaultBackupDir, { recursive: true });
+    }
+    const targetPath = destinationPath || path.resolve(defaultBackupDir, `backtest_backup_${Date.now()}.db`);
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
+
+    const normalizedTarget = targetPath.replace(/\\/g, '/');
+    this.db.exec(`VACUUM INTO '${normalizedTarget}'`);
+
+    const stats = fs.statSync(targetPath);
+    return {
+      success: true,
+      backupPath: targetPath,
+      backupSizeBytes: stats.size,
+      timestamp: Date.now(),
+    };
+  }
 }

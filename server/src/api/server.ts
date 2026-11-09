@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { CONFIG } from '../config/index.js';
+import { DatabaseService } from '../database/connection.js';
 import { IngestionWorker } from '../services/ingestionWorker.js';
 import { apiRouter } from './routes.js';
 
@@ -10,6 +11,20 @@ export function createServer() {
   // Basic security and parsing middlewares
   app.use(cors({ origin: '*' }));
   app.use(express.json());
+
+  // Security Headers Middleware (Production Hardening)
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob:; connect-src 'self' http://localhost:* ws: wss:; frame-ancestors 'self';"
+    );
+    next();
+  });
 
   // Simple In-Memory Rate Limiter Middleware
   const clientRequests = new Map<string, { count: number; resetTime: number }>();
@@ -24,9 +39,12 @@ export function createServer() {
     } else {
       record.count++;
       if (record.count > CONFIG.API_PROTECTION.RATE_LIMIT_MAX_REQUESTS) {
+        const retryAfterSeconds = Math.ceil((record.resetTime - now) / 1000);
+        res.setHeader('Retry-After', String(retryAfterSeconds));
         return res.status(429).json({
           success: false,
           error: 'Rate limit exceeded. Please wait before making more requests.',
+          retryAfter: retryAfterSeconds,
         });
       }
     }
@@ -68,23 +86,24 @@ export function createServer() {
 export async function startServer(port: number = CONFIG.PORT) {
   const app = createServer();
 
-  // Run initial catalog synchronization on startup
-  try {
-    const worker = new IngestionWorker();
-    await worker.syncInstrumentCatalogs();
-  } catch (err) {
-    console.warn('[Server Startup] Warning during initial instrument sync:', err);
-  }
-
   const server = app.listen(port, CONFIG.HOST, () => {
     console.log(`[Backtest of Chart API] Server listening on http://localhost:${port}`);
   });
+
+  // Background catalog synchronization if empty
+  const stats = DatabaseService.getInstance().getDatabaseStats();
+  if (stats.instrumentsCount === 0) {
+    const worker = new IngestionWorker();
+    worker.syncInstrumentCatalogs().catch((err) => {
+      console.warn('[Server Startup] Warning during initial instrument sync:', err);
+    });
+  }
 
   return server;
 }
 
 // Direct execution entrypoint
-if (!process.env.TEST_MODE || process.argv[1]?.includes('server')) {
+if (!process.env.TEST_MODE && (process.argv[1]?.includes('server.ts') || process.argv[1]?.includes('server.js'))) {
   startServer().catch((err) => {
     console.error('Fatal Server Error:', err);
     process.exit(1);

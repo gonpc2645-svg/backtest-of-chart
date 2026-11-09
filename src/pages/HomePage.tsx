@@ -117,76 +117,62 @@ export const HomePage: React.FC = () => {
               <div className="hero-terminal-card__title">
                 BACKTEST OF CHART • PLATFORM ARCHITECTURE OVERVIEW
               </div>
-              <span className="status-pill status-pill--blue">Phase 1 UI</span>
+              <span className="status-pill status-pill--cyan">Phase 1–7 Audited</span>
             </div>
 
             <div className="hero-terminal-card__body">
               <div className="terminal-blueprint__banner">
                 <span className="terminal-blueprint__label">
-                  PHASE 1 STATUS
+                  SYSTEM STATUS
                 </span>
                 <p className="terminal-blueprint__text">
-                  Website Foundation &amp; Backtest Setup Interface active.
-                  Historical data feeds and replay engines are scheduled for
-                  upcoming development phases.
+                  Historical Market Data, Deterministic Replay Engine, Simulated Hedging Execution, and Performance Analytics are fully operational.
                 </p>
               </div>
 
               <div className="terminal-blueprint__modules">
                 <div className="terminal-module terminal-module--active">
                   <div className="terminal-module__top">
-                    <span className="terminal-module__code">PHASE 01</span>
+                    <span className="terminal-module__code">PHASE 01–02</span>
                     <span className="terminal-module__badge terminal-module__badge--ready">
-                      Active Now
+                      Active
                     </span>
                   </div>
                   <div className="terminal-module__name">
-                    Platform Foundation &amp; Session Setup UI
+                    Historical Market Data &amp; Session Setup UI
                   </div>
                   <div className="terminal-module__meta">
-                    Market Category • Timeframe (M1–D1) • Target Date Selection
+                    Binance Spot Klines (Verified M1 Ingestion) • Dukascopy Catalog
                   </div>
                 </div>
 
-                <div className="terminal-module">
-                  <div className="terminal-module__top">
-                    <span className="terminal-module__code">PHASE 02</span>
-                    <span className="terminal-module__badge">Planned</span>
-                  </div>
-                  <div className="terminal-module__name">
-                    Historical Market Data Integrations
-                  </div>
-                  <div className="terminal-module__meta">
-                    Intended Providers: Dukascopy (FX, Metals, Indices) &amp;
-                    Binance (Crypto)
-                  </div>
-                </div>
-
-                <div className="terminal-module">
+                <div className="terminal-module terminal-module--active">
                   <div className="terminal-module__top">
                     <span className="terminal-module__code">PHASE 03–05</span>
-                    <span className="terminal-module__badge">Planned</span>
+                    <span className="terminal-module__badge terminal-module__badge--ready">
+                      Active
+                    </span>
                   </div>
                   <div className="terminal-module__name">
                     Replay, Simulated Execution &amp; Analytics Engines
                   </div>
                   <div className="terminal-module__meta">
-                    Historical Replay • Risk Controls • Session Trade Ledger
+                    Zero Future Leakage Replay • Hedging Margin &amp; Stop-Out • Drawdown Analytics
                   </div>
                 </div>
 
                 <div className="terminal-module">
                   <div className="terminal-module__top">
-                    <span className="terminal-module__code">PHASE 06</span>
-                    <span className="terminal-module__badge">
-                      Subject to Approval
+                    <span className="terminal-module__code">PHASE 06–07</span>
+                    <span className="terminal-module__badge terminal-module__badge--ready">
+                      Lightweight Charts Active
                     </span>
                   </div>
                   <div className="terminal-module__name">
-                    Advanced Charting Workspace Integration
+                    Charting Workspace &amp; Production Hardening
                   </div>
                   <div className="terminal-module__meta">
-                    Planned application for official charting library licensing
+                    Built-in Charting Active • Advanced Charts Adapter Ready • Audited &amp; Hardened
                   </div>
                 </div>
               </div>

@@ -141,8 +141,10 @@ export class MarketDataService {
     const instrument = this.db.getInstrumentById(instrumentId);
     const coverage = this.db.getCoverage(instrumentId);
 
-    // Retrieve canonical M1 candles from persistent disk database
-    const m1Candles = this.db.getCandlesM1(instrumentId, fromTimestamp, toTimestamp, limit * 15);
+    // Retrieve canonical M1 candles from persistent disk database with timeframe-appropriate limit multiplier
+    const multiplier =
+      timeframe === 'D1' ? 1440 : timeframe === 'H4' ? 240 : timeframe === 'H1' ? 60 : timeframe === 'M30' ? 30 : timeframe === 'M15' ? 15 : timeframe === 'M5' ? 5 : 1;
+    const m1Candles = this.db.getCandlesM1(instrumentId, fromTimestamp, toTimestamp, limit * multiplier);
 
     // Aggregate to requested timeframe
     const aggregated = TimeframeAggregator.aggregate(m1Candles, timeframe);

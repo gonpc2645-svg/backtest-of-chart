@@ -45,4 +45,7 @@ export const CONFIG = {
     DEFAULT_CANDLES_LIMIT: 500,
     MAX_QUERY_RANGE_DAYS: 90,
   },
+
+  // Ingestion Operator Token Protection
+  OPERATOR_TOKEN: process.env.OPERATOR_TOKEN || 'backtest_of_chart_operator_key_2026',
 } as const;

@@ -26,8 +26,9 @@ export class RequestValidator {
       return { success: false, error: 'Query parameter "instrument" is required (e.g. BINANCE:BTCUSDT).' };
     }
     const cleanInstrument = instrument.trim().toUpperCase();
-    if (!cleanInstrument.includes(':') || cleanInstrument.length > 50) {
-      return { success: false, error: 'Invalid instrument format. Expected "PROVIDER:SYMBOL".' };
+    const instrumentRegex = /^[A-Z0-9_]{2,20}:[A-Z0-9_\-]{2,20}$/;
+    if (!instrumentRegex.test(cleanInstrument)) {
+      return { success: false, error: 'Invalid instrument format. Expected "PROVIDER:SYMBOL" with alphanumeric characters.' };
     }
 
     // 2. Validate timeframe
