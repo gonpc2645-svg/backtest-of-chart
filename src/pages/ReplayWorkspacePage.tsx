@@ -10,7 +10,8 @@ import {
 } from '../services/replay/types';
 import { ReplayPersistence } from '../services/replay/ReplayPersistence';
 import { LegendOHLC, ReplayChartAdapter } from '../components/replay/ReplayChartAdapter';
-import { MarketDataApi } from '../services/marketDataApi';
+import { ChartDrawingOverlay } from '../components/replay/ChartDrawingOverlay';
+import { CANONICAL_CATALOG_INSTRUMENTS } from '../data/canonicalCatalog';
 import { TradingEngine } from '../services/trading/TradingEngine';
 import {
   CreateOrderRequest,
@@ -19,11 +20,16 @@ import {
 } from '../services/trading/TradingTypes';
 import { TradingPersistence } from '../services/trading/TradingPersistence';
 import { AccountSummaryBar } from '../components/trading/AccountSummaryBar';
-import { OrderEntryPanel } from '../components/trading/OrderEntryPanel';
+import {
+  ChartPickTarget,
+  ExternalOrderPreset,
+  OrderEntryPanel,
+} from '../components/trading/OrderEntryPanel';
 import { BottomTradingPanel } from '../components/trading/BottomTradingPanel';
 import { PositionModifyModal } from '../components/trading/PositionModifyModal';
 import { AccountResetModal } from '../components/trading/AccountResetModal';
 import { ExportImportModal } from '../components/trading/ExportImportModal';
+import { detectTradingSession } from '../components/analytics/TradeExecutionReviewModal';
 import '../styles/replayWorkspace.css';
 import '../styles/trading.css';
 
@@ -50,6 +56,19 @@ export const ReplayWorkspacePage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Enhanced Chart & Pro Backtest States
+  const [showEma, setShowEma] = useState<boolean>(true);
+  const [chartViewMode, setChartViewMode] = useState<'REPLAY' | 'LIVE_TV'>('REPLAY');
+  const [fromDateInput, setFromDateInput] = useState<string>('2025-01-14');
+  const [toDateInput, setToDateInput] = useState<string>('2025-01-17');
+  const [chartPickTarget, setChartPickTarget] = useState<ChartPickTarget>('NONE');
+  const [pickedChartPrice, setPickedChartPrice] = useState<{
+    target: ChartPickTarget;
+    price: number;
+    ts: number;
+  } | null>(null);
+  const [externalPreset, setExternalPreset] = useState<ExternalOrderPreset | null>(null);
+
   // Phase 4 Trading States
   const [tradingState, setTradingState] = useState<TradingState | null>(null);
   const [modifyingPosition, setModifyingPosition] = useState<Position | null>(null);
@@ -57,20 +76,26 @@ export const ReplayWorkspacePage: React.FC = () => {
   const [isExportImportModalOpen, setIsExportImportModalOpen] = useState<boolean>(false);
   const [isBottomPanelCollapsed, setIsBottomPanelCollapsed] = useState<boolean>(false);
 
-  // Format UTC datetime
+  const toDateStrUtc = (ts: number): string => {
+    const d = new Date(ts);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const formatUtc = (ts: number): string => {
     if (!ts || isNaN(ts)) return '--';
     const d = new Date(ts);
     return d.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
   };
 
-  // Format price
   const formatPrice = (p: number | undefined): string => {
     if (p === undefined || isNaN(p)) return '-';
-    return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    const maxDec = p > 0 && p < 10 ? 5 : p < 200 ? 3 : 2;
+    return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: maxDec });
   };
 
-  // Get current market price safely
   const getCurrentPrice = useCallback((): number => {
     const curCandle = engineRef.current?.getCurrentCandle();
     if (curCandle && curCandle.close > 0) return curCandle.close;
@@ -91,12 +116,10 @@ export const ReplayWorkspacePage: React.FC = () => {
 
         let activeSession: ReplaySession | null = null;
 
-        // Try load from ID in route
         if (sessionId) {
           activeSession = await ReplayPersistence.getSession(sessionId);
         }
 
-        // If not found by ID, check if query params provided
         if (!activeSession) {
           const queryInst = searchParams.get('instrument');
           const queryTf = (searchParams.get('tf') as TimeframeId) || 'M15';
@@ -127,7 +150,6 @@ export const ReplayWorkspacePage: React.FC = () => {
           }
         }
 
-        // If still no session, load most recent from IndexedDB
         if (!activeSession) {
           const all = await ReplayPersistence.getAllSessions();
           if (all.length > 0) {
@@ -135,23 +157,21 @@ export const ReplayWorkspacePage: React.FC = () => {
           }
         }
 
-        // If no past sessions exist, use verified BTCUSDT range
         if (!activeSession) {
-          const covRes = await MarketDataApi.getCoverage('BINANCE:BTCUSDT').catch(() => null);
-          const earliest = covRes?.coverage?.earliestVerifiedTimestamp || 1794050000000;
-          const latest = covRes?.coverage?.latestVerifiedTimestamp || earliest + 1000 * 60 * 1000;
+          const defaultStart = Date.parse('2025-01-14T00:00:00Z');
+          const defaultEnd = Date.parse('2025-01-17T23:59:00Z');
 
           activeSession = {
             id: 'session_default_btc',
-            provider: 'BINANCE',
-            instrumentId: 'BINANCE:BTCUSDT',
-            providerSymbol: 'BTCUSDT',
-            displayName: 'Bitcoin / Tether USD Spot',
-            marketCategory: 'crypto',
+            provider: 'DUKASCOPY',
+            instrumentId: 'DUKASCOPY:XAUUSD',
+            providerSymbol: 'XAUUSD',
+            displayName: 'XAU / USD (Gold / US Dollar)',
+            marketCategory: 'metals',
             timeframe: 'M15',
-            startTimestamp: earliest,
-            endTimestamp: latest,
-            cursor: earliest,
+            startTimestamp: defaultStart,
+            endTimestamp: defaultEnd,
+            cursor: defaultStart,
             speed: 1,
             status: 'PAUSED',
             skippedGaps: [],
@@ -162,9 +182,24 @@ export const ReplayWorkspacePage: React.FC = () => {
           await ReplayPersistence.saveSession(activeSession);
         }
 
+        // Normalize legacy sessions that were auto-seeded with the 2026-11-09 system clock
+        if (activeSession.startTimestamp > 1790000000000) {
+          const normStart = Date.parse('2025-01-14T00:00:00Z');
+          const normEnd = Date.parse('2025-01-17T23:59:00Z');
+          activeSession = {
+            ...activeSession,
+            startTimestamp: normStart,
+            endTimestamp: normEnd,
+            cursor: normStart,
+          };
+          await ReplayPersistence.saveSession(activeSession);
+        }
+
         if (isCancelled) return;
 
         setSession(activeSession);
+        setFromDateInput(toDateStrUtc(activeSession.startTimestamp));
+        setToDateInput(toDateStrUtc(activeSession.endTimestamp));
         setCursor(activeSession.cursor);
         setCurrentSpeed(activeSession.speed || 1);
         setCurrentTimeframe(activeSession.timeframe || 'M15');
@@ -189,18 +224,49 @@ export const ReplayWorkspacePage: React.FC = () => {
 
     let isDisposed = false;
 
-    // A. Create chart adapter
     const adapter = new ReplayChartAdapter();
     adapter.initialize(chartContainerRef.current, (legend) => {
       setCurrentLegend(legend);
     });
     chartAdapterRef.current = adapter;
 
-    // B. Create replay engine
     const engine = new ReplayEngine(session);
     engineRef.current = engine;
 
-    // Attach replay listeners
+    // Immediately initialize TradingEngine synchronously from canonical catalog so OrderEntryPanel is always visible
+    const fallbackInst =
+      CANONICAL_CATALOG_INSTRUMENTS.find((i) => i.id === session.instrumentId) ||
+      CANONICAL_CATALOG_INSTRUMENTS.find((i) => i.providerSymbol === session.providerSymbol) ||
+      CANONICAL_CATALOG_INSTRUMENTS[0];
+
+    const initialTradingEngine = new TradingEngine(session.id, fallbackInst);
+    tradingEngineRef.current = initialTradingEngine;
+    setTradingState(initialTradingEngine.getState());
+
+    initialTradingEngine.on('stateChange', (st) => {
+      setTradingState({ ...st });
+      adapter.updateTradeOverlays(st.positions, st.pendingOrders);
+    });
+
+    engine.on('m1Candle', (m1) => {
+      tradingEngineRef.current?.onTick(m1);
+    });
+
+    // Restore persisted trading state if available
+    TradingPersistence.getTradingState(session.id)
+      .then((savedState) => {
+        if (isDisposed || !savedState) return;
+        const restoredEngine = new TradingEngine(session.id, fallbackInst, savedState);
+        tradingEngineRef.current = restoredEngine;
+        setTradingState(restoredEngine.getState());
+        restoredEngine.on('stateChange', (st) => {
+          setTradingState({ ...st });
+          adapter.updateTradeOverlays(st.positions, st.pendingOrders);
+        });
+        adapter.updateTradeOverlays(restoredEngine.getPositions(), restoredEngine.getPendingOrders());
+      })
+      .catch(() => {});
+
     engine.on('stateChange', (st) => {
       setEngineState(st);
       if (st !== 'DATA_GAP') {
@@ -234,36 +300,6 @@ export const ReplayWorkspacePage: React.FC = () => {
       setErrorMessage(err);
     });
 
-    // C. Initialize TradingEngine
-    MarketDataApi.getCoverage(session.instrumentId)
-      .then(async (covData) => {
-        if (isDisposed) return;
-        const savedTradingState = await TradingPersistence.getTradingState(session.id);
-        if (isDisposed) return;
-
-        const tradingEngine = new TradingEngine(session.id, covData.instrument, savedTradingState || undefined);
-        tradingEngineRef.current = tradingEngine;
-        setTradingState(tradingEngine.getState());
-
-        // Attach trading engine event listener
-        tradingEngine.on('stateChange', (st) => {
-          setTradingState({ ...st });
-          adapter.updateTradeOverlays(st.positions, st.pendingOrders);
-        });
-
-        // Pipe canonical M1 candle to trading engine on every simulation step
-        engine.on('m1Candle', (m1) => {
-          tradingEngineRef.current?.onTick(m1);
-        });
-
-        // Initial overlay update
-        adapter.updateTradeOverlays(tradingEngine.getPositions(), tradingEngine.getPendingOrders());
-      })
-      .catch((err) => {
-        console.warn('[TradingEngine Init] Error loading instrument specification:', err);
-      });
-
-    // Initialize historical data and bars
     engine
       .initialize()
       .then(() => {
@@ -278,7 +314,6 @@ export const ReplayWorkspacePage: React.FC = () => {
         setErrorMessage(err instanceof Error ? err.message : String(err));
       });
 
-    // Auto-pause if user switches tabs
     const handleVisibilityChange = () => {
       if (document.hidden && engine.getState() === 'PLAYING') {
         engine.pause();
@@ -298,11 +333,27 @@ export const ReplayWorkspacePage: React.FC = () => {
     };
   }, [session]);
 
+  // Wire chart click-to-pick price handler
+  useEffect(() => {
+    if (!chartAdapterRef.current) return;
+    if (chartPickTarget === 'NONE') {
+      chartAdapterRef.current.setOnPriceClick(undefined);
+    } else {
+      chartAdapterRef.current.setOnPriceClick((price) => {
+        setPickedChartPrice({ target: chartPickTarget, price, ts: Date.now() });
+        setChartPickTarget('NONE');
+      });
+    }
+  }, [chartPickTarget]);
+
   // Keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
         return;
       }
 
@@ -368,38 +419,105 @@ export const ReplayWorkspacePage: React.FC = () => {
     engineRef.current?.setTimeframe(tf);
   }, []);
 
+  const handleToggleEma = useCallback(() => {
+    setShowEma((prev) => {
+      const next = !prev;
+      chartAdapterRef.current?.setEmaVisible(next);
+      return next;
+    });
+  }, []);
+
+  // FX Replay style "Go-To Next Session" (Jumps to London 07:00, NY 13:00, or Tokyo 00:00 UTC)
+  const handleSkipToNextSession = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (engine.getState() === 'PLAYING') engine.pause();
+
+    const sessionHours = [0, 7, 13];
+    const startCur = engine.getCursor();
+    const curHour = new Date(startCur).getUTCHours();
+    let targetHour = sessionHours.find((h) => h > curHour) ?? 0;
+
+    let steps = 0;
+    while (steps < 360) {
+      const advanced = await engine.stepForward();
+      if (!advanced) break;
+      steps++;
+      const d = new Date(engine.getCursor());
+      if (d.getUTCHours() === targetHour && d.getUTCMinutes() === 0) {
+        break;
+      }
+    }
+    if (chartAdapterRef.current) {
+      chartAdapterRef.current.setCandles(engine.getCurrentBars());
+    }
+  }, []);
+
+  // FX Replay style "Skip to Trade Exit (SL/TP Hit)"
+  const handleSkipToTradeExit = useCallback(async () => {
+    const engine = engineRef.current;
+    const tEngine = tradingEngineRef.current;
+    if (!engine || !tEngine) return;
+    if (engine.getState() === 'PLAYING') engine.pause();
+
+    const initialOpenCount = tEngine.getPositions().length;
+    if (initialOpenCount === 0) return;
+
+    let steps = 0;
+    while (steps < 240) {
+      const advanced = await engine.stepForward();
+      if (!advanced) break;
+      steps++;
+      if (tEngine.getPositions().length < initialOpenCount) {
+        break;
+      }
+    }
+    if (chartAdapterRef.current) {
+      chartAdapterRef.current.setCandles(engine.getCurrentBars());
+    }
+  }, []);
+
   const handleContinueAcrossGap = useCallback(() => {
     engineRef.current?.continueAcrossGap();
     setDataGap(null);
   }, []);
 
-  const handleScrubChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!session || !engineRef.current) return;
-    const pct = Number(e.target.value);
-    const range = session.endTimestamp - session.startTimestamp;
-    const targetMs = session.startTimestamp + (range * pct) / 100;
-    engineRef.current.seek(targetMs);
-    if (chartAdapterRef.current) {
-      chartAdapterRef.current.setCandles(engineRef.current.getCurrentBars());
-    }
-  }, [session]);
+  const handleScrubChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!session || !engineRef.current) return;
+      const pct = Number(e.target.value);
+      const range = session.endTimestamp - session.startTimestamp;
+      const targetMs = session.startTimestamp + (range * pct) / 100;
+      engineRef.current.seek(targetMs);
+      if (chartAdapterRef.current) {
+        chartAdapterRef.current.setCandles(engineRef.current.getCurrentBars());
+      }
+    },
+    [session]
+  );
 
   // UI Actions: Trading Actions
-  const handleOrderSubmit = useCallback((req: CreateOrderRequest): { success: boolean; error?: string } => {
-    if (!tradingEngineRef.current || !engineRef.current) {
-      return { success: false, error: 'Trading Engine not ready.' };
-    }
-    const curPrice = getCurrentPrice();
-    const curCursor = engineRef.current.getCursor();
-    return tradingEngineRef.current.placeOrder(req, curPrice, curCursor);
-  }, [getCurrentPrice]);
+  const handleOrderSubmit = useCallback(
+    (req: CreateOrderRequest): { success: boolean; error?: string } => {
+      if (!tradingEngineRef.current || !engineRef.current) {
+        return { success: false, error: 'Trading Engine not ready.' };
+      }
+      const curPrice = getCurrentPrice();
+      const curCursor = engineRef.current.getCursor();
+      return tradingEngineRef.current.placeOrder(req, curPrice, curCursor);
+    },
+    [getCurrentPrice]
+  );
 
-  const handleClosePosition = useCallback((positionId: string) => {
-    if (!tradingEngineRef.current || !engineRef.current) return;
-    const curPrice = getCurrentPrice();
-    const curCursor = engineRef.current.getCursor();
-    tradingEngineRef.current.closePosition(positionId, curPrice, curCursor);
-  }, [getCurrentPrice]);
+  const handleClosePosition = useCallback(
+    (positionId: string) => {
+      if (!tradingEngineRef.current || !engineRef.current) return;
+      const curPrice = getCurrentPrice();
+      const curCursor = engineRef.current.getCursor();
+      tradingEngineRef.current.closePosition(positionId, curPrice, curCursor);
+    },
+    [getCurrentPrice]
+  );
 
   const handleCancelPendingOrder = useCallback((orderId: string) => {
     if (!tradingEngineRef.current || !engineRef.current) return;
@@ -413,12 +531,39 @@ export const ReplayWorkspacePage: React.FC = () => {
     return tradingEngineRef.current.modifyPositionProtection(positionId, curCursor, sl, tp);
   }, []);
 
-  const handlePartialClose = useCallback((positionId: string, quantity: number) => {
-    if (!tradingEngineRef.current || !engineRef.current) return { success: false, error: 'Engine unavailable' };
-    const curPrice = getCurrentPrice();
+  // 1-Click Move SL to Break-Even (Entry Price)
+  const handleMoveToBreakEven = useCallback((pos: Position) => {
+    if (!tradingEngineRef.current || !engineRef.current) return;
     const curCursor = engineRef.current.getCursor();
-    return tradingEngineRef.current.closePosition(positionId, curPrice, curCursor, quantity);
-  }, [getCurrentPrice]);
+    tradingEngineRef.current.modifyPositionProtection(pos.id, curCursor, pos.entryPrice, pos.takeProfit);
+  }, []);
+
+  // 1-Click Quick Partial Close (e.g. 50%)
+  const handleQuickPartialClose = useCallback(
+    (pos: Position, fraction: number) => {
+      if (!tradingEngineRef.current || !engineRef.current) return;
+      const spec = tradingEngineRef.current.getSpecification();
+      const step = spec.quantityStep || 0.01;
+      const closeQty = Math.max(
+        spec.minQuantity,
+        Number((Math.floor((pos.quantity * fraction) / step) * step).toFixed(spec.volumePrecision))
+      );
+      const curPrice = getCurrentPrice();
+      const curCursor = engineRef.current.getCursor();
+      tradingEngineRef.current.closePosition(pos.id, curPrice, curCursor, closeQty);
+    },
+    [getCurrentPrice]
+  );
+
+  const handlePartialClose = useCallback(
+    (positionId: string, quantity: number) => {
+      if (!tradingEngineRef.current || !engineRef.current) return { success: false, error: 'Engine unavailable' };
+      const curPrice = getCurrentPrice();
+      const curCursor = engineRef.current.getCursor();
+      return tradingEngineRef.current.closePosition(positionId, curPrice, curCursor, quantity);
+    },
+    [getCurrentPrice]
+  );
 
   const handleConfirmResetAccount = useCallback((initBal: number, lev: number) => {
     if (!tradingEngineRef.current || !engineRef.current) return;
@@ -429,22 +574,88 @@ export const ReplayWorkspacePage: React.FC = () => {
     }
   }, []);
 
-  const handleImportTradingState = useCallback((newState: TradingState) => {
-    if (!session || !tradingEngineRef.current) return;
-    TradingPersistence.saveTradingState(session.id, newState);
-    setTradingState(newState);
-    if (chartAdapterRef.current) {
-      chartAdapterRef.current.updateTradeOverlays(newState.positions, newState.pendingOrders);
-    }
-  }, [session]);
+  const handleImportTradingState = useCallback(
+    (newState: TradingState) => {
+      if (!session || !tradingEngineRef.current) return;
+      TradingPersistence.saveTradingState(session.id, newState);
+      setTradingState(newState);
+      if (chartAdapterRef.current) {
+        chartAdapterRef.current.updateTradeOverlays(newState.positions, newState.pendingOrders);
+      }
+    },
+    [session]
+  );
+
+  const handleApplyDateRange = useCallback(
+    async (e?: React.FormEvent, overrideFrom?: string, overrideTo?: string) => {
+      if (e) e.preventDefault();
+      if (!session) return;
+
+      const fStr = overrideFrom || fromDateInput;
+      const tStr = overrideTo || toDateInput;
+      const parsedStart = Date.parse(`${fStr}T00:00:00Z`);
+      const parsedEnd = Date.parse(`${tStr}T23:59:00Z`);
+
+      if (isNaN(parsedStart)) return;
+      const validEnd = !isNaN(parsedEnd) && parsedEnd > parsedStart ? parsedEnd : parsedStart + 3 * 86400000;
+
+      const updatedSession: ReplaySession = {
+        ...session,
+        timeframe: currentTimeframe,
+        startTimestamp: parsedStart,
+        endTimestamp: validEnd,
+        cursor: parsedStart,
+        status: 'PAUSED',
+        updatedAt: Date.now(),
+      };
+
+      setIsLoading(true);
+      setErrorMessage(null);
+      await ReplayPersistence.saveSession(updatedSession);
+      setSession(updatedSession);
+    },
+    [session, fromDateInput, toDateInput, currentTimeframe]
+  );
+
+  const handleQuickSymbolChange = useCallback(
+    async (newInstrumentId: string) => {
+      if (!session) return;
+      const inst = CANONICAL_CATALOG_INSTRUMENTS.find((i) => i.id === newInstrumentId);
+      if (!inst) return;
+
+      const updatedSession: ReplaySession = {
+        ...session,
+        provider: inst.provider,
+        instrumentId: inst.id,
+        providerSymbol: inst.providerSymbol,
+        displayName: inst.displayName,
+        marketCategory: inst.marketCategory,
+        timeframe: currentTimeframe,
+        cursor: session.startTimestamp,
+        status: 'PAUSED',
+        updatedAt: Date.now(),
+      };
+
+      setIsLoading(true);
+      setErrorMessage(null);
+      await ReplayPersistence.saveSession(updatedSession);
+      setSession(updatedSession);
+    },
+    [session, currentTimeframe]
+  );
 
   const currentPrice = getCurrentPrice();
+  const activeSessionLabel = cursor ? detectTradingSession(cursor) : 'London';
+  const tvWidgetSymbol =
+    session?.provider === 'BINANCE'
+      ? `BINANCE:${session.providerSymbol}`
+      : `OANDA:${session?.providerSymbol || 'XAUUSD'}`;
 
   return (
     <div className="replay-workspace">
       {/* 1. Header Bar */}
-      <header className="replay-header">
-        <div className="replay-header__left">
+      <header className="replay-header" style={{ height: 'auto', minHeight: 54, padding: '6px 14px', flexWrap: 'wrap' }}>
+        <div className="replay-header__left" style={{ flexWrap: 'wrap', gap: 8 }}>
           <Link to="/backtest" className="replay-header__back-btn" title="Back to Setup">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -453,9 +664,20 @@ export const ReplayWorkspacePage: React.FC = () => {
           </Link>
 
           {session && (
-            <div className="replay-header__symbol-badge">
+            <div className="replay-header__symbol-badge" title="Switch Instrument / Pair">
               <span className="replay-header__provider-tag">{session.provider}</span>
-              <span className="replay-header__symbol-name">{session.providerSymbol}</span>
+              <select
+                className="replay-symbol-select"
+                value={session.instrumentId}
+                onChange={(e) => handleQuickSymbolChange(e.target.value)}
+                aria-label="Select Trading Pair"
+              >
+                {CANONICAL_CATALOG_INSTRUMENTS.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.providerSymbol} ({inst.marketCategory.toUpperCase()})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -472,9 +694,75 @@ export const ReplayWorkspacePage: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {/* Inline Historical Date Range Bar (From Date -> To Date + Enter) */}
+          <form className="replay-date-range-bar" onSubmit={(e) => handleApplyDateRange(e)}>
+            <span className="replay-date-range-label">📅 Date:</span>
+            <label className="replay-date-input-group">
+              <span>From</span>
+              <input
+                type="date"
+                className="replay-date-input"
+                value={fromDateInput}
+                onChange={(e) => setFromDateInput(e.target.value)}
+                title="Backtest Start Date (UTC)"
+              />
+            </label>
+            <span style={{ color: 'var(--text-dim)' }}>&rarr;</span>
+            <label className="replay-date-input-group">
+              <span>To</span>
+              <input
+                type="date"
+                className="replay-date-input"
+                value={toDateInput}
+                min={fromDateInput}
+                onChange={(e) => setToDateInput(e.target.value)}
+                title="Backtest End Date (UTC)"
+              />
+            </label>
+            <button
+              type="submit"
+              className="replay-date-go-btn"
+              title="Load Real Historical Market Data for Selected Dates (Enter)"
+            >
+              Load &crarr;
+            </button>
+          </form>
+
+          {/* Indicator & Chart Mode Switcher */}
+          <button
+            type="button"
+            className={`replay-timeframe-btn ${showEma ? 'replay-timeframe-btn--active' : ''}`}
+            onClick={handleToggleEma}
+            title="Toggle EMA 20 & EMA 50 Indicators"
+          >
+            EMA 20/50
+          </button>
+
+          <button
+            type="button"
+            className={`replay-timeframe-btn ${chartViewMode === 'LIVE_TV' ? 'replay-timeframe-btn--active' : ''}`}
+            onClick={() => setChartViewMode(chartViewMode === 'REPLAY' ? 'LIVE_TV' : 'REPLAY')}
+            title="Switch between Replay Backtest Engine and Live TradingView Chart"
+          >
+            {chartViewMode === 'REPLAY' ? '📺 Live TV Chart' : '⏪ Back to Replay'}
+          </button>
         </div>
 
         <div className="replay-header__right">
+          {/* Active Market Session Pill */}
+          <span
+            className="replay-status-pill"
+            style={{
+              background: 'rgba(56, 189, 248, 0.12)',
+              color: '#38bdf8',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+            }}
+            title="Active Forex/Market Session at Replay Timestamp"
+          >
+            🌐 {activeSessionLabel}
+          </span>
+
           {/* Analytics Dashboard Button */}
           <Link
             to={`/backtest/analytics/${session?.id || ''}`}
@@ -518,9 +806,21 @@ export const ReplayWorkspacePage: React.FC = () => {
       <div className="replay-workspace-body">
         {/* Chart Area */}
         <main className="replay-chart-area">
-          {/* Floating OHLCV Legend */}
-          {currentLegend && (
-            <div className="replay-chart-legend" aria-live="off">
+          {/* Chart Pick Mode Banner */}
+          {chartPickTarget !== 'NONE' && (
+            <div className="replay-draw-banner" style={{ left: 160 }}>
+              <span>
+                🎯 Click anywhere on the chart to set <strong>{chartPickTarget}</strong> price
+              </span>
+              <button type="button" onClick={() => setChartPickTarget('NONE')}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* Floating OHLCV + EMA Legend */}
+          {chartViewMode === 'REPLAY' && currentLegend && (
+            <div className="replay-chart-legend" style={{ left: 52 }} aria-live="off">
               <span className="replay-chart-legend__symbol">{session?.providerSymbol || ''}</span>
               <span className="replay-chart-legend__item">
                 O: <strong className="replay-chart-legend__value">{formatPrice(currentLegend.open)}</strong>
@@ -543,24 +843,52 @@ export const ReplayWorkspacePage: React.FC = () => {
                   {formatPrice(currentLegend.close)}
                 </strong>
               </span>
-              {currentLegend.volume !== undefined && currentLegend.volume !== null && (
-                <span className="replay-chart-legend__item">
-                  Vol: <span className="replay-chart-legend__value">{formatPrice(currentLegend.volume)}</span>
+              {showEma && currentLegend.ema20 && (
+                <span className="replay-chart-legend__item" style={{ color: '#38bdf8' }}>
+                  EMA20: <strong>{formatPrice(currentLegend.ema20)}</strong>
                 </span>
               )}
-              {currentLegend.changePct !== undefined && (
-                <span
-                  className={`replay-chart-legend__value ${
-                    currentLegend.changePct >= 0
-                      ? 'replay-chart-legend__value--up'
-                      : 'replay-chart-legend__value--down'
-                  }`}
-                >
-                  ({currentLegend.changePct >= 0 ? '+' : ''}
-                  {currentLegend.changePct.toFixed(2)}%)
+              {showEma && currentLegend.ema50 && (
+                <span className="replay-chart-legend__item" style={{ color: '#f59e0b' }}>
+                  EMA50: <strong>{formatPrice(currentLegend.ema50)}</strong>
                 </span>
               )}
             </div>
+          )}
+
+          {/* Interactive Drawing Toolbar + SVG Overlay (FX Replay / TradeZella style) */}
+          {chartViewMode === 'REPLAY' && session && (
+            <ChartDrawingOverlay
+              sessionId={session.id}
+              adapter={chartAdapterRef.current}
+              currentTimeSec={Math.floor(cursor / 1000)}
+              currentPrice={currentPrice}
+              onApplyPositionTool={(preset) =>
+                setExternalPreset({
+                  ...preset,
+                  timestamp: Date.now(),
+                })
+              }
+            />
+          )}
+
+          {/* Live TradingView Embed Mode (SNRBD APK style live chart option) */}
+          {chartViewMode === 'LIVE_TV' && (
+            <iframe
+              title="TradingView Live Chart"
+              src={`https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(
+                tvWidgetSymbol
+              )}&interval=15&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hide_side_toolbar=0&allow_symbol_change=1`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                zIndex: 15,
+                background: '#070A10',
+              }}
+            />
           )}
 
           {/* Loading overlay */}
@@ -585,10 +913,14 @@ export const ReplayWorkspacePage: React.FC = () => {
           )}
 
           {/* Lightweight Charts Canvas Element */}
-          <div ref={chartContainerRef} className="replay-chart-mount" />
+          <div
+            ref={chartContainerRef}
+            className="replay-chart-mount"
+            style={{ visibility: chartViewMode === 'REPLAY' ? 'visible' : 'hidden' }}
+          />
         </main>
 
-        {/* Order Entry Panel (Right Sidebar) */}
+        {/* Smart Order Entry Panel (Right Sidebar) */}
         {tradingEngineRef.current && tradingState && (
           <OrderEntryPanel
             specification={tradingEngineRef.current.getSpecification()}
@@ -596,6 +928,10 @@ export const ReplayWorkspacePage: React.FC = () => {
             currentPrice={currentPrice}
             executionAssumptions={tradingState.executionAssumptions}
             onSubmitOrder={handleOrderSubmit}
+            chartPickTarget={chartPickTarget}
+            onRequestChartPick={setChartPickTarget}
+            pickedChartPrice={pickedChartPrice}
+            externalPreset={externalPreset}
           />
         )}
       </div>
@@ -705,6 +1041,30 @@ export const ReplayWorkspacePage: React.FC = () => {
                 <path d="M5 4l10 8-10 8V4zM19 5v14" />
               </svg>
             </button>
+
+            {/* FX Replay Go-To Next Session Button */}
+            <button
+              type="button"
+              className="replay-btn"
+              onClick={handleSkipToNextSession}
+              disabled={isLoading || engineState === 'COMPLETED'}
+              title="FX Replay Go-To: Fast-forward to next Market Session Open (London / NY / Asian)"
+            >
+              <span>⚡ Next Session</span>
+            </button>
+
+            {/* FX Replay Skip to SL/TP Exit Button */}
+            {tradingState && tradingState.positions.length > 0 && (
+              <button
+                type="button"
+                className="replay-btn"
+                style={{ borderColor: '#38bdf8', color: '#38bdf8' }}
+                onClick={handleSkipToTradeExit}
+                title="Fast-forward until an open position hits SL or TP"
+              >
+                <span>🎯 Skip to SL/TP</span>
+              </button>
+            )}
           </div>
 
           {/* Speed Control Group */}
@@ -742,11 +1102,12 @@ export const ReplayWorkspacePage: React.FC = () => {
           onOpenModifyModal={(pos) => setModifyingPosition(pos)}
           onClosePosition={handleClosePosition}
           onCancelPendingOrder={handleCancelPendingOrder}
+          onMoveToBreakEven={handleMoveToBreakEven}
+          onQuickPartialClose={handleQuickPartialClose}
         />
       )}
 
       {/* 6. Modals */}
-      {/* Modify Position Modal */}
       {modifyingPosition && tradingEngineRef.current && (
         <PositionModifyModal
           position={modifyingPosition}
@@ -757,7 +1118,6 @@ export const ReplayWorkspacePage: React.FC = () => {
         />
       )}
 
-      {/* Account Reset Modal */}
       {tradingState && (
         <AccountResetModal
           isOpen={isResetModalOpen}
@@ -768,7 +1128,6 @@ export const ReplayWorkspacePage: React.FC = () => {
         />
       )}
 
-      {/* Export / Import Modal */}
       {session && tradingState && (
         <ExportImportModal
           isOpen={isExportImportModalOpen}
@@ -779,7 +1138,6 @@ export const ReplayWorkspacePage: React.FC = () => {
         />
       )}
 
-      {/* Data Gap Modal */}
       {dataGap && (
         <div className="replay-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gap-title">
           <div className="replay-gap-card">

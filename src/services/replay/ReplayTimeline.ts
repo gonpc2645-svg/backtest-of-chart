@@ -43,6 +43,12 @@ export class ReplayTimeline {
     return this.m1Candles.length;
   }
 
+  public getCandleTimestampAt(index: number): number | null {
+    if (this.m1Candles.length === 0) return null;
+    const clamped = Math.max(0, Math.min(index, this.m1Candles.length - 1));
+    return this.m1Candles[clamped].timestamp;
+  }
+
   public getIsFullyLoaded(): boolean {
     return this.isFullyLoaded;
   }
@@ -74,9 +80,11 @@ export class ReplayTimeline {
     try {
       const allFetched: ApiCandle[] = [];
       let currentFrom = from;
-      const CHUNK_SIZE = 2000;
+      const CHUNK_SIZE = 1000;
+      let safetyIterations = 0;
 
-      while (currentFrom < to) {
+      while (currentFrom < to && safetyIterations < 15) {
+        safetyIterations++;
         const resp = await MarketDataApi.getReplayCandles({
           instrumentId: this.instrumentId,
           from: currentFrom,
@@ -91,7 +99,7 @@ export class ReplayTimeline {
         allFetched.push(...resp.candles);
 
         const lastCandle = resp.candles[resp.candles.length - 1];
-        if (resp.candles.length < CHUNK_SIZE || lastCandle.timestamp >= to) {
+        if (lastCandle.timestamp >= to - 60000 || lastCandle.timestamp <= currentFrom) {
           break;
         }
 

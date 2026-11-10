@@ -5,12 +5,18 @@ import {
   TradeFilterCriteria,
   TradeSortField,
 } from '../../services/analytics/AnalyticsTypes';
+import {
+  ReviewableTrade,
+  TradeExecutionReviewModal,
+  getStoredJournalMeta,
+} from './TradeExecutionReviewModal';
 
 interface TradeHistoryTableProps {
   trades: NormalizedTrade[];
+  onTradeMetaUpdated?: () => void;
 }
 
-export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) => {
+export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades, onTradeMetaUpdated }) => {
   const [filterCriteria, setFilterCriteria] = useState<TradeFilterCriteria>({
     result: 'ALL',
     direction: 'ALL',
@@ -21,9 +27,16 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
   const [sortOrder, setSortOrder] = useState<SortOrder>('DESC');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [reviewingTrade, setReviewingTrade] = useState<ReviewableTrade | null>(null);
+  const [, setMetaVersion] = useState<number>(0);
 
   const formatUtc = (ms: number) => {
     return new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+  };
+
+  const formatPrice = (p: number) => {
+    if (!p || isNaN(p)) return '0.00';
+    return p < 10 ? p.toFixed(5) : p < 200 ? p.toFixed(3) : p.toFixed(2);
   };
 
   const formatDuration = (ms: number) => {
@@ -38,32 +51,29 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
     return parts.join(' ');
   };
 
-  // Filter Logic
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
-      // 1. Result filter
       if (filterCriteria.result === 'WINNERS' && t.pnl <= 0.000001) return false;
       if (filterCriteria.result === 'LOSERS' && t.pnl >= -0.000001) return false;
       if (filterCriteria.result === 'BREAKEVEN' && Math.abs(t.pnl) > 0.000001) return false;
 
-      // 2. Direction filter
       if (filterCriteria.direction !== 'ALL' && t.direction !== filterCriteria.direction) {
         return false;
       }
 
-      // 3. Search query
       if (filterCriteria.searchQuery) {
         const query = filterCriteria.searchQuery.toLowerCase();
+        const meta = getStoredJournalMeta(t.id);
         const matchId = t.id.toLowerCase().includes(query);
         const matchInst = t.instrumentId.toLowerCase().includes(query);
-        if (!matchId && !matchInst) return false;
+        const matchTag = meta.setupTag.toLowerCase().includes(query) || meta.moodTag.toLowerCase().includes(query);
+        if (!matchId && !matchInst && !matchTag) return false;
       }
 
       return true;
     });
   }, [trades, filterCriteria]);
 
-  // Sorting Logic
   const sortedTrades = useMemo(() => {
     const list = [...filteredTrades];
     list.sort((a, b) => {
@@ -104,7 +114,6 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
     return list;
   }, [filteredTrades, sortField, sortOrder]);
 
-  // Pagination Logic
   const totalPages = Math.max(1, Math.ceil(sortedTrades.length / pageSize));
   const pageIndex = Math.min(currentPage, totalPages);
   const paginatedTrades = sortedTrades.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
@@ -162,7 +171,7 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
           <input
             type="text"
             className="trade-search-input"
-            placeholder="Search by Trade ID or Instrument..."
+            placeholder="Search ID, Pair, or Setup Tag..."
             value={filterCriteria.searchQuery}
             onChange={(e) => {
               setFilterCriteria((prev) => ({ ...prev, searchQuery: e.target.value }));
@@ -202,9 +211,6 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
               <th onClick={() => handleSortClick('entryTime')}>
                 Entry (UTC) {sortField === 'entryTime' ? (sortOrder === 'ASC' ? '↑' : '↓') : ''}
               </th>
-              <th onClick={() => handleSortClick('exitTime')}>
-                Exit (UTC) {sortField === 'exitTime' ? (sortOrder === 'ASC' ? '↑' : '↓') : ''}
-              </th>
               <th onClick={() => handleSortClick('durationMs')}>
                 Duration {sortField === 'durationMs' ? (sortOrder === 'ASC' ? '↑' : '↓') : ''}
               </th>
@@ -215,8 +221,9 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
                 Return (%) {sortField === 'returnPct' ? (sortOrder === 'ASC' ? '↑' : '↓') : ''}
               </th>
               <th>Exit Reason</th>
-              <th>Initial Risk</th>
+              <th>Playbook / Grade</th>
               <th>R-Multiple</th>
+              <th>Execution Review</th>
             </tr>
           </thead>
           <tbody>
@@ -227,80 +234,103 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
                 </td>
               </tr>
             ) : (
-              paginatedTrades.map((t) => (
-                <tr key={t.id}>
-                  <td>#{t.id.slice(-6)}</td>
-                  <td><strong>{t.instrumentId.split(':')[1] || t.instrumentId}</strong></td>
-                  <td>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.45rem',
-                        borderRadius: 3,
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        background: t.direction === 'BUY' ? 'rgba(34, 211, 238, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-                        color: t.direction === 'BUY' ? '#22d3ee' : '#f43f5e',
-                      }}
-                    >
-                      {t.direction}
-                    </span>
-                  </td>
-                  <td>{t.quantity}</td>
-                  <td>{t.entryPrice.toFixed(2)}</td>
-                  <td>{t.exitPrice.toFixed(2)}</td>
-                  <td>{formatUtc(t.entryTime)}</td>
-                  <td>{formatUtc(t.exitTime)}</td>
-                  <td>{formatDuration(t.durationMs)}</td>
-                  <td
-                    style={{
-                      fontWeight: 700,
-                      color: t.pnl > 0 ? '#22d3ee' : t.pnl < 0 ? '#f43f5e' : '#cbd5e1',
-                    }}
-                  >
-                    {t.pnl >= 0 ? '+$' : '-$'}{Math.abs(t.pnl).toFixed(2)}
-                  </td>
-                  <td style={{ color: t.returnPct >= 0 ? '#22d3ee' : '#f43f5e' }}>
-                    {t.returnPct >= 0 ? '+' : ''}{t.returnPct.toFixed(2)}%
-                  </td>
-                  <td>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        padding: '0.15rem 0.4rem',
-                        borderRadius: 3,
-                        background: '#1f2937',
-                        color: '#9ca3af',
-                      }}
-                    >
-                      {t.exitReason}
-                    </span>
-                    {t.isAmbiguous && (
+              paginatedTrades.map((t) => {
+                const meta = getStoredJournalMeta(t.id);
+                return (
+                  <tr key={t.id}>
+                    <td>#{t.id.slice(-6)}</td>
+                    <td>
+                      <strong>{t.instrumentId.split(':')[1] || t.instrumentId}</strong>
+                    </td>
+                    <td>
                       <span
-                        title="Both SL and TP touched within the same candle; resolved by conservative SL-first rule."
-                        style={{ marginLeft: 4, color: '#fbbf24', fontSize: '0.75rem' }}
+                        style={{
+                          padding: '0.2rem 0.45rem',
+                          borderRadius: 3,
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          background: t.direction === 'BUY' ? 'rgba(34, 211, 238, 0.15)' : 'rgba(244, 63, 94, 0.15)',
+                          color: t.direction === 'BUY' ? '#22d3ee' : '#f43f5e',
+                        }}
                       >
-                        [Ambiguous]
+                        {t.direction}
                       </span>
-                    )}
-                  </td>
-                  <td>
-                    {t.initialRisk !== undefined ? `$${t.initialRisk.toFixed(2)}` : '-'}
-                  </td>
-                  <td
-                    style={{
-                      fontWeight: 600,
-                      color:
-                        t.rMultiple !== undefined && t.rMultiple > 0
-                          ? '#22d3ee'
-                          : t.rMultiple !== undefined && t.rMultiple < 0
-                          ? '#f43f5e'
-                          : '#9ca3af',
-                    }}
-                  >
-                    {t.rMultiple !== undefined ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '-'}
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td>{t.quantity}</td>
+                    <td>{formatPrice(t.entryPrice)}</td>
+                    <td>{formatPrice(t.exitPrice)}</td>
+                    <td>{formatUtc(t.entryTime)}</td>
+                    <td>{formatDuration(t.durationMs)}</td>
+                    <td
+                      style={{
+                        fontWeight: 700,
+                        color: t.pnl > 0 ? '#22d3ee' : t.pnl < 0 ? '#f43f5e' : '#cbd5e1',
+                      }}
+                    >
+                      {t.pnl >= 0 ? '+$' : '-$'}
+                      {Math.abs(t.pnl).toFixed(2)}
+                    </td>
+                    <td style={{ color: t.returnPct >= 0 ? '#22d3ee' : '#f43f5e' }}>
+                      {t.returnPct >= 0 ? '+' : ''}
+                      {t.returnPct.toFixed(2)}%
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.15rem 0.4rem',
+                          borderRadius: 3,
+                          background: '#1f2937',
+                          color: '#9ca3af',
+                        }}
+                      >
+                        {t.exitReason}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 600 }}>
+                        [{meta.grade}] {meta.setupTag}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        fontWeight: 600,
+                        color:
+                          t.rMultiple !== undefined && t.rMultiple > 0
+                            ? '#22d3ee'
+                            : t.rMultiple !== undefined && t.rMultiple < 0
+                            ? '#f43f5e'
+                            : '#9ca3af',
+                      }}
+                    >
+                      {t.rMultiple !== undefined ? `${t.rMultiple >= 0 ? '+' : ''}${t.rMultiple.toFixed(2)}R` : '-'}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="trade-filter-btn active"
+                        style={{ cursor: 'pointer', fontSize: '0.72rem' }}
+                        onClick={() =>
+                          setReviewingTrade({
+                            id: t.id,
+                            instrumentId: t.instrumentId,
+                            direction: t.direction,
+                            quantity: t.quantity,
+                            entryPrice: t.entryPrice,
+                            exitPrice: t.exitPrice,
+                            pnl: t.pnl,
+                            entryTime: t.entryTime,
+                            exitTime: t.exitTime,
+                            exitReason: t.exitReason,
+                          })
+                        }
+                      >
+                        📈 Review &amp; Tag
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -334,6 +364,16 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) 
           </button>
         </div>
       </div>
+
+      {/* Trade Execution Review & Tagging Modal */}
+      <TradeExecutionReviewModal
+        trade={reviewingTrade}
+        onClose={() => setReviewingTrade(null)}
+        onMetaSaved={() => {
+          setMetaVersion((v) => v + 1);
+          if (onTradeMetaUpdated) onTradeMetaUpdated();
+        }}
+      />
     </div>
   );
 };

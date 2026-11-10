@@ -159,7 +159,16 @@ export class ReplayEngine {
       await this.timeline.loadRange(contextStartTs, this.session.endTimestamp);
 
       // 4. Reconstruct chart bars up to current cursor (STRICT ZERO FUTURE LEAKAGE)
-      const revealedM1 = this.timeline.getRevealedCandles();
+      let revealedM1 = this.timeline.getRevealedCandles();
+      if (revealedM1.length === 0 && this.timeline.getCandleCount() > 0) {
+        const fallbackIdx = Math.min(30, Math.floor(this.timeline.getCandleCount() / 3));
+        const firstValidTs = this.timeline.getCandleTimestampAt(fallbackIdx);
+        if (firstValidTs) {
+          this.session.cursor = firstValidTs;
+          this.timeline.setCursor(firstValidTs);
+          revealedM1 = this.timeline.getRevealedCandles();
+        }
+      }
       this.currentBars = ReplayCandleProcessor.reconstructBarsUpToCursor(
         revealedM1,
         this.session.timeframe,

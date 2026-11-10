@@ -234,10 +234,88 @@
 
 .replay-chart-area {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   position: relative;
   width: 100%;
   height: 100%;
   background-color: #070a10;
+}
+
+/* INLINE HISTORICAL DATE RANGE BAR (FROM -> TO + ENTER) */
+.replay-date-range-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+.replay-date-range-label {
+  color: #38bdf8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.replay-date-input-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 0.71rem;
+}
+
+.replay-date-input {
+  background: #070a10;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  color-scheme: dark;
+}
+
+.replay-date-input:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+.replay-date-go-btn {
+  padding: 3px 10px;
+  background: linear-gradient(135deg, #06b6d4, #2563eb);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.73rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.replay-date-go-btn:hover {
+  opacity: 0.92;
+}
+
+.replay-symbol-select {
+  background: transparent;
+  color: #38bdf8;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  border: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.replay-symbol-select option {
+  background: #0b1019;
+  color: #e2e8f0;
 }
 
 .replay-chart-mount {
@@ -592,4 +670,100 @@
   .replay-main-buttons {
     justify-content: space-between;
   }
+}
+
+
+/* FX REPLAY / TRADEZELLA DRAWING TOOLBAR & SVG OVERLAY */
+.replay-drawing-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 8px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+  background: rgba(11, 16, 25, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.replay-draw-btn {
+  width: 32px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.replay-draw-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--text-primary);
+}
+
+.replay-draw-btn--active {
+  background: rgba(56, 189, 248, 0.2) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+.replay-draw-btn--long {
+  color: #4ade80;
+}
+
+.replay-draw-btn--short {
+  color: #f87171;
+}
+
+.replay-draw-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.replay-draw-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 2px 2px;
+}
+
+.replay-drawing-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9;
+}
+
+.replay-draw-banner {
+  position: absolute;
+  top: 48px;
+  left: 52px;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid #38bdf8;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #e2e8f0;
+}
+
+.replay-draw-banner button {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  background: rgba(248, 113, 113, 0.18);
+  border: 1px solid #f87171;
+  color: #fca5a5;
+  border-radius: 4px;
+  cursor: pointer;
 }

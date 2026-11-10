@@ -72,7 +72,9 @@
 
 /* ORDER ENTRY PANEL */
 .order-entry-panel {
-  width: 290px;
+  width: 295px;
+  min-width: 295px;
+  flex-shrink: 0;
   background-color: var(--bg-elevated);
   border-left: 1px solid var(--border-subtle);
   display: flex;
@@ -495,4 +497,118 @@
     border-left: none;
     border-top: 1px solid var(--border-subtle);
   }
+}
+
+
+/* SMART RISK SIZER & DRAWDOWN SIMULATOR */
+.order-risk-box {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.order-risk-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.order-preset-chip {
+  flex: 1;
+  min-width: 38px;
+  padding: 4px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.order-preset-chip:hover {
+  border-color: #38bdf8;
+  color: var(--text-primary);
+}
+
+.order-preset-chip.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.order-risk-mini-input {
+  width: 50px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  background: #070a10;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.order-pick-btn {
+  padding: 1px 6px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.order-pick-btn.active {
+  background: #38bdf8;
+  color: #070a10;
+}
+
+.order-drawdown-box {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+
+.order-drawdown-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.order-drawdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(30, 41, 59, 0.7);
+}
+
+.order-drawdown-item {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.68rem;
+  background: rgba(7, 10, 16, 0.6);
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.order-drawdown-item span {
+  color: var(--text-dim);
 }

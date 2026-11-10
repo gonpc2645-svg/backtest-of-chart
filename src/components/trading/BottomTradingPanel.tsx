@@ -5,6 +5,11 @@ import {
   TradeRecord,
   TradingEvent,
 } from '../../services/trading/TradingTypes';
+import {
+  ReviewableTrade,
+  TradeExecutionReviewModal,
+  getStoredJournalMeta,
+} from '../analytics/TradeExecutionReviewModal';
 
 interface BottomTradingPanelProps {
   positions: Position[];
@@ -15,6 +20,8 @@ interface BottomTradingPanelProps {
   onOpenModifyModal: (position: Position) => void;
   onClosePosition: (positionId: string) => void;
   onCancelPendingOrder: (orderId: string) => void;
+  onMoveToBreakEven?: (position: Position) => void;
+  onQuickPartialClose?: (position: Position, fraction: number) => void;
 }
 
 type TabKey = 'POSITIONS' | 'PENDING' | 'ORDERS_HISTORY' | 'TRADE_HISTORY' | 'EVENTS';
@@ -28,8 +35,12 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
   onOpenModifyModal,
   onClosePosition,
   onCancelPendingOrder,
+  onMoveToBreakEven,
+  onQuickPartialClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>('POSITIONS');
+  const [reviewingTrade, setReviewingTrade] = useState<ReviewableTrade | null>(null);
+  const [, setMetaVersion] = useState<number>(0);
 
   const formatUtc = (ts: number): string => {
     if (!ts || isNaN(ts)) return '-';
@@ -38,6 +49,11 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
 
   const formatCurrency = (val: number): string => {
     return (val < 0 ? '-$' : '$') + Math.abs(val).toFixed(2);
+  };
+
+  const formatPrice = (p: number): string => {
+    if (!p || isNaN(p)) return '-';
+    return p < 10 ? p.toFixed(5) : p < 200 ? p.toFixed(3) : p.toFixed(2);
   };
 
   return (
@@ -74,7 +90,7 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
             className={`trading-tab-btn ${activeTab === 'TRADE_HISTORY' ? 'active' : ''}`}
             onClick={() => setActiveTab('TRADE_HISTORY')}
           >
-            <span>Trade History</span>
+            <span>Trade History &amp; Review</span>
             <span className="trading-tab-badge">{tradeRecords.length}</span>
           </button>
 
@@ -107,7 +123,9 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
         {/* 1. POSITIONS TAB */}
         {activeTab === 'POSITIONS' && (
           positions.length === 0 ? (
-            <div className="trading-table-empty">No active open positions. Place an order from the Order Entry panel.</div>
+            <div className="trading-table-empty">
+              No active open positions. Place an order from the Smart Order Entry panel or use Long/Short R:R on chart.
+            </div>
           ) : (
             <table className="trading-table">
               <thead>
@@ -123,55 +141,88 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
                   <th>Floating P/L</th>
                   <th>Margin</th>
                   <th>Opened (UTC)</th>
-                  <th>Actions</th>
+                  <th>Quick Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {positions.map((pos) => (
-                  <tr key={pos.id}>
-                    <td>#{pos.id.slice(-6)}</td>
-                    <td><strong>{pos.instrumentId.split(':')[1] || pos.instrumentId}</strong></td>
-                    <td>
-                      <span className={`badge-direction ${pos.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'}`}>
-                        {pos.direction}
-                      </span>
-                    </td>
-                    <td>{pos.quantity}</td>
-                    <td>{pos.entryPrice.toFixed(2)}</td>
-                    <td>{pos.currentPrice.toFixed(2)}</td>
-                    <td style={{ color: pos.stopLoss ? '#f87171' : 'var(--text-dim)' }}>
-                      {pos.stopLoss ? pos.stopLoss.toFixed(2) : '-'}
-                    </td>
-                    <td style={{ color: pos.takeProfit ? '#4ade80' : 'var(--text-dim)' }}>
-                      {pos.takeProfit ? pos.takeProfit.toFixed(2) : '-'}
-                    </td>
-                    <td style={{ fontWeight: 700, color: pos.unrealizedPnL >= 0 ? '#22d3ee' : '#f43f5e' }}>
-                      {formatCurrency(pos.unrealizedPnL)}
-                    </td>
-                    <td>${pos.usedMargin.toFixed(2)}</td>
-                    <td>{formatUtc(pos.entryTimestamp)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          type="button"
-                          className="btn-action-sm"
-                          onClick={() => onOpenModifyModal(pos)}
-                          title="Modify SL/TP or Partial Close"
+                {positions.map((pos) => {
+                  const isInProfit = pos.unrealizedPnL > 0;
+                  return (
+                    <tr key={pos.id}>
+                      <td>#{pos.id.slice(-6)}</td>
+                      <td>
+                        <strong>{pos.instrumentId.split(':')[1] || pos.instrumentId}</strong>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge-direction ${
+                            pos.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'
+                          }`}
                         >
-                          Modify
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-action-sm btn-action-sm--close btn-position-close"
-                          onClick={() => onClosePosition(pos.id)}
-                          title="Close Position at Market Price"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {pos.direction}
+                        </span>
+                      </td>
+                      <td>{pos.quantity}</td>
+                      <td>{formatPrice(pos.entryPrice)}</td>
+                      <td>{formatPrice(pos.currentPrice)}</td>
+                      <td style={{ color: pos.stopLoss ? '#f87171' : 'var(--text-dim)' }}>
+                        {pos.stopLoss ? formatPrice(pos.stopLoss) : '-'}
+                      </td>
+                      <td style={{ color: pos.takeProfit ? '#4ade80' : 'var(--text-dim)' }}>
+                        {pos.takeProfit ? formatPrice(pos.takeProfit) : '-'}
+                      </td>
+                      <td style={{ fontWeight: 700, color: pos.unrealizedPnL >= 0 ? '#22d3ee' : '#f43f5e' }}>
+                        {formatCurrency(pos.unrealizedPnL)}
+                      </td>
+                      <td>${pos.usedMargin.toFixed(2)}</td>
+                      <td>{formatUtc(pos.entryTimestamp)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {onMoveToBreakEven && (
+                            <button
+                              type="button"
+                              className="btn-action-sm"
+                              style={{
+                                borderColor: isInProfit ? '#38bdf8' : undefined,
+                                color: isInProfit ? '#38bdf8' : undefined,
+                              }}
+                              onClick={() => onMoveToBreakEven(pos)}
+                              title="1-Click Break-Even (Move SL to Entry Price)"
+                            >
+                              BE
+                            </button>
+                          )}
+                          {onQuickPartialClose && (
+                            <button
+                              type="button"
+                              className="btn-action-sm"
+                              onClick={() => onQuickPartialClose(pos, 0.5)}
+                              title="Partial Close 50% of Position"
+                            >
+                              50%
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn-action-sm"
+                            onClick={() => onOpenModifyModal(pos)}
+                            title="Modify SL/TP or Partial Close"
+                          >
+                            Modify
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-action-sm btn-action-sm--close btn-position-close"
+                            onClick={() => onClosePosition(pos.id)}
+                            title="Close Full Position at Market Price"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )
@@ -202,17 +253,23 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
                 {pendingOrders.map((ord) => (
                   <tr key={ord.id}>
                     <td>#{ord.id.slice(-6)}</td>
-                    <td><strong>{ord.instrumentId.split(':')[1] || ord.instrumentId}</strong></td>
+                    <td>
+                      <strong>{ord.instrumentId.split(':')[1] || ord.instrumentId}</strong>
+                    </td>
                     <td>{ord.orderType}</td>
                     <td>
-                      <span className={`badge-direction ${ord.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'}`}>
+                      <span
+                        className={`badge-direction ${
+                          ord.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'
+                        }`}
+                      >
                         {ord.direction}
                       </span>
                     </td>
                     <td>{ord.quantity}</td>
-                    <td>{ord.requestedPrice.toFixed(2)}</td>
-                    <td>{ord.stopLoss ? ord.stopLoss.toFixed(2) : '-'}</td>
-                    <td>{ord.takeProfit ? ord.takeProfit.toFixed(2) : '-'}</td>
+                    <td>{formatPrice(ord.requestedPrice)}</td>
+                    <td>{ord.stopLoss ? formatPrice(ord.stopLoss) : '-'}</td>
+                    <td>{ord.takeProfit ? formatPrice(ord.takeProfit) : '-'}</td>
                     <td>{formatUtc(ord.createdAt)}</td>
                     <td>
                       <span style={{ color: '#fbbf24', fontWeight: 600 }}>PENDING</span>
@@ -242,7 +299,6 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
               <thead>
                 <tr>
                   <th>Trade ID</th>
-                  <th>Position</th>
                   <th>Instrument</th>
                   <th>Direction</th>
                   <th>Qty</th>
@@ -250,43 +306,94 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
                   <th>Exit Price</th>
                   <th>Realized P/L</th>
                   <th>Reason</th>
-                  <th>Opened (UTC)</th>
+                  <th>Setup / Grade</th>
                   <th>Closed (UTC)</th>
+                  <th>Execution Chart</th>
                 </tr>
               </thead>
               <tbody>
-                {tradeRecords.slice().reverse().map((t) => (
-                  <tr key={t.id}>
-                    <td>#{t.id.slice(-6)}</td>
-                    <td>#{t.positionId.slice(-6)}</td>
-                    <td><strong>{t.instrumentId.split(':')[1] || t.instrumentId}</strong></td>
-                    <td>
-                      <span className={`badge-direction ${t.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'}`}>
-                        {t.direction}
-                      </span>
-                    </td>
-                    <td>{t.quantity}</td>
-                    <td>{t.entryPrice.toFixed(2)}</td>
-                    <td>{t.exitPrice.toFixed(2)}</td>
-                    <td style={{ fontWeight: 700, color: t.pnl >= 0 ? '#22d3ee' : '#f43f5e' }}>
-                      {formatCurrency(t.pnl)}
-                    </td>
-                    <td>
-                      <span style={{
-                        padding: '1px 5px',
-                        borderRadius: 3,
-                        fontSize: '0.68rem',
-                        fontWeight: 600,
-                        background: t.exitReason === 'TP' ? 'rgba(74, 222, 128, 0.15)' : t.exitReason === 'SL' || t.exitReason === 'STOP_OUT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                        color: t.exitReason === 'TP' ? '#4ade80' : t.exitReason === 'SL' || t.exitReason === 'STOP_OUT' ? '#f87171' : 'inherit'
-                      }}>
-                        {t.exitReason} {t.isAmbiguous ? '(Ambiguous)' : ''}
-                      </span>
-                    </td>
-                    <td>{formatUtc(t.entryTime)}</td>
-                    <td>{formatUtc(t.exitTime)}</td>
-                  </tr>
-                ))}
+                {tradeRecords
+                  .slice()
+                  .reverse()
+                  .map((t) => {
+                    const meta = getStoredJournalMeta(t.id);
+                    return (
+                      <tr key={t.id}>
+                        <td>#{t.id.slice(-6)}</td>
+                        <td>
+                          <strong>{t.instrumentId.split(':')[1] || t.instrumentId}</strong>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge-direction ${
+                              t.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'
+                            }`}
+                          >
+                            {t.direction}
+                          </span>
+                        </td>
+                        <td>{t.quantity}</td>
+                        <td>{formatPrice(t.entryPrice)}</td>
+                        <td>{formatPrice(t.exitPrice)}</td>
+                        <td style={{ fontWeight: 700, color: t.pnl >= 0 ? '#22d3ee' : '#f43f5e' }}>
+                          {formatCurrency(t.pnl)}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              background:
+                                t.exitReason === 'TP'
+                                  ? 'rgba(74, 222, 128, 0.15)'
+                                  : t.exitReason === 'SL' || t.exitReason === 'STOP_OUT'
+                                  ? 'rgba(239, 68, 68, 0.15)'
+                                  : 'rgba(255, 255, 255, 0.05)',
+                              color:
+                                t.exitReason === 'TP'
+                                  ? '#4ade80'
+                                  : t.exitReason === 'SL' || t.exitReason === 'STOP_OUT'
+                                  ? '#f87171'
+                                  : 'inherit',
+                            }}
+                          >
+                            {t.exitReason} {t.isAmbiguous ? '(Ambiguous)' : ''}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.7rem', color: '#38bdf8' }}>
+                            [{meta.grade}] {meta.setupTag}
+                          </span>
+                        </td>
+                        <td>{formatUtc(t.exitTime)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-action-sm"
+                            style={{ borderColor: '#38bdf8', color: '#38bdf8' }}
+                            onClick={() =>
+                              setReviewingTrade({
+                                id: t.id,
+                                instrumentId: t.instrumentId,
+                                direction: t.direction,
+                                quantity: t.quantity,
+                                entryPrice: t.entryPrice,
+                                exitPrice: t.exitPrice,
+                                pnl: t.pnl,
+                                entryTime: t.entryTime,
+                                exitTime: t.exitTime,
+                                exitReason: t.exitReason,
+                              })
+                            }
+                          >
+                            📈 Review Chart
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           )
@@ -313,33 +420,49 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {completedOrders.slice().reverse().map((ord) => (
-                  <tr key={ord.id}>
-                    <td>#{ord.id.slice(-6)}</td>
-                    <td><strong>{ord.instrumentId.split(':')[1] || ord.instrumentId}</strong></td>
-                    <td>{ord.orderType}</td>
-                    <td>
-                      <span className={`badge-direction ${ord.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'}`}>
-                        {ord.direction}
-                      </span>
-                    </td>
-                    <td>{ord.quantity}</td>
-                    <td>{ord.requestedPrice.toFixed(2)}</td>
-                    <td>{ord.filledPrice ? ord.filledPrice.toFixed(2) : '-'}</td>
-                    <td>{formatUtc(ord.createdAt)}</td>
-                    <td>
-                      <span style={{
-                        fontWeight: 700,
-                        color: ord.status === 'FILLED' ? '#4ade80' : ord.status === 'CANCELLED' ? 'var(--text-dim)' : '#f87171'
-                      }}>
-                        {ord.status}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>
-                      {ord.rejectionReason || (ord.filledPrice ? `Filled at ${ord.filledPrice}` : '-')}
-                    </td>
-                  </tr>
-                ))}
+                {completedOrders
+                  .slice()
+                  .reverse()
+                  .map((ord) => (
+                    <tr key={ord.id}>
+                      <td>#{ord.id.slice(-6)}</td>
+                      <td>
+                        <strong>{ord.instrumentId.split(':')[1] || ord.instrumentId}</strong>
+                      </td>
+                      <td>{ord.orderType}</td>
+                      <td>
+                        <span
+                          className={`badge-direction ${
+                            ord.direction === 'BUY' ? 'badge-direction--buy' : 'badge-direction--sell'
+                          }`}
+                        >
+                          {ord.direction}
+                        </span>
+                      </td>
+                      <td>{ord.quantity}</td>
+                      <td>{formatPrice(ord.requestedPrice)}</td>
+                      <td>{ord.filledPrice ? formatPrice(ord.filledPrice) : '-'}</td>
+                      <td>{formatUtc(ord.createdAt)}</td>
+                      <td>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color:
+                              ord.status === 'FILLED'
+                                ? '#4ade80'
+                                : ord.status === 'CANCELLED'
+                                ? 'var(--text-dim)'
+                                : '#f87171',
+                          }}
+                        >
+                          {ord.status}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>
+                        {ord.rejectionReason || (ord.filledPrice ? `Filled at ${ord.filledPrice}` : '-')}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           )
@@ -362,25 +485,35 @@ export const BottomTradingPanel: React.FC<BottomTradingPanelProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {events.slice().reverse().map((ev) => (
-                  <tr key={ev.id}>
-                    <td>#{ev.id.slice(-6)}</td>
-                    <td>
-                      <span style={{ fontWeight: 700, color: '#38bdf8' }}>{ev.type}</span>
-                    </td>
-                    <td>{formatUtc(ev.timestamp)}</td>
-                    <td>${ev.balanceAfter.toFixed(2)}</td>
-                    <td>${ev.equityAfter.toFixed(2)}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                      {JSON.stringify(ev.details)}
-                    </td>
-                  </tr>
-                ))}
+                {events
+                  .slice()
+                  .reverse()
+                  .map((ev) => (
+                    <tr key={ev.id}>
+                      <td>#{ev.id.slice(-6)}</td>
+                      <td>
+                        <span style={{ fontWeight: 700, color: '#38bdf8' }}>{ev.type}</span>
+                      </td>
+                      <td>{formatUtc(ev.timestamp)}</td>
+                      <td>${ev.balanceAfter.toFixed(2)}</td>
+                      <td>${ev.equityAfter.toFixed(2)}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                        {JSON.stringify(ev.details)}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           )
         )}
       </div>
+
+      {/* Trade Execution Review Modal */}
+      <TradeExecutionReviewModal
+        trade={reviewingTrade}
+        onClose={() => setReviewingTrade(null)}
+        onMetaSaved={() => setMetaVersion((v) => v + 1)}
+      />
     </div>
   );
 };

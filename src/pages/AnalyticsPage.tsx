@@ -8,6 +8,7 @@ import { PeriodicPerformanceSection } from '../components/analytics/PeriodicPerf
 import { TradeDistributionChart } from '../components/analytics/TradeDistributionChart';
 import { TradeHistoryTable } from '../components/analytics/TradeHistoryTable';
 import { WinLossStreaksSection } from '../components/analytics/WinLossStreaksSection';
+import { SessionAndCalendarAnalyticsSection } from '../components/analytics/SessionAndCalendarAnalyticsSection';
 import { AnalyticsEngine } from '../services/analytics/AnalyticsEngine';
 import { AnalyticsPersistence } from '../services/analytics/AnalyticsPersistence';
 import { SessionAnalyticsReport } from '../services/analytics/AnalyticsTypes';
@@ -210,12 +211,19 @@ export const AnalyticsPage: React.FC = () => {
         <TradeDistributionChart bins={report.distributionBins} />
       </div>
 
-      {/* 8. Closed Trade History Table with Filtering & Sorting */}
+      {/* 8. Session Killzones, Prop-Firm Challenge Tracker & Daily P&L Calendar */}
+      <SessionAndCalendarAnalyticsSection
+        trades={report.closedTrades}
+        overview={report.overview}
+        drawdown={report.drawdownAnalysis}
+      />
+
+      {/* 9. Closed Trade History Table with Execution Review & Tagging */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <h3 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0, color: '#f3f4f6' }}>
-          Closed Trade Records ({report.closedTrades.length})
+          Closed Trade Records &amp; Visual Execution Review ({report.closedTrades.length})
         </h3>
-        <TradeHistoryTable trades={report.closedTrades} />
+        <TradeHistoryTable trades={report.closedTrades} onTradeMetaUpdated={loadAnalytics} />
       </div>
     </div>
   );

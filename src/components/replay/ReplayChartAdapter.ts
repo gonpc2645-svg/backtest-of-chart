@@ -6,6 +6,7 @@ import {
   LineStyle,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   ColorType,
   CrosshairMode,
   UTCTimestamp,
@@ -21,23 +22,33 @@ export interface LegendOHLC {
   close: number;
   volume?: number | null;
   changePct?: number;
+  ema20?: number;
+  ema50?: number;
 }
 
 export class ReplayChartAdapter {
   private chart: IChartApi | null = null;
   private candleSeries: ISeriesApi<'Candlestick'> | null = null;
   private volumeSeries: ISeriesApi<'Histogram'> | null = null;
+  private ema20Series: ISeriesApi<'Line'> | null = null;
+  private ema50Series: ISeriesApi<'Line'> | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private onLegendUpdate?: (data: LegendOHLC | null) => void;
+  private onChartPriceClick?: (price: number, time: number) => void;
+  private visualChangeListeners = new Set<() => void>();
   private lastCandle: ReplayCandleData | null = null;
+  private allCandles: ReplayCandleData[] = [];
   private tradePriceLines: IPriceLine[] = [];
+  private showEma: boolean = true;
 
   public initialize(
     container: HTMLElement,
-    onLegend?: (data: LegendOHLC | null) => void
+    onLegend?: (data: LegendOHLC | null) => void,
+    onPriceClick?: (price: number, time: number) => void
   ): void {
     this.dispose();
     this.onLegendUpdate = onLegend;
+    this.onChartPriceClick = onPriceClick;
 
     this.chart = createChart(container, {
       width: container.clientWidth || 800,
@@ -57,7 +68,7 @@ export class ReplayChartAdapter {
         vertLine: {
           color: 'rgba(56, 189, 248, 0.5)',
           width: 1,
-          style: 2, // LineStyle.Dashed
+          style: 2,
           labelBackgroundColor: '#0F172A',
         },
         horzLine: {
@@ -110,13 +121,30 @@ export class ReplayChartAdapter {
       },
     });
 
+    // Add EMA 20 & EMA 50 Line series
+    this.ema20Series = this.chart.addSeries(LineSeries, {
+      color: '#38BDF8',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
+    this.ema50Series = this.chart.addSeries(LineSeries, {
+      color: '#F59E0B',
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
     // Add Volume histogram series
     this.volumeSeries = this.chart.addSeries(HistogramSeries, {
       color: 'rgba(34, 211, 238, 0.3)',
       priceFormat: {
         type: 'volume',
       },
-      priceScaleId: '', // Overlay pane
+      priceScaleId: '',
     });
 
     this.volumeSeries.priceScale().applyOptions({
@@ -138,6 +166,8 @@ export class ReplayChartAdapter {
       const bar = param.seriesData.get(this.candleSeries) as any;
       if (bar && this.onLegendUpdate) {
         const volBar = this.volumeSeries ? (param.seriesData.get(this.volumeSeries) as any) : null;
+        const e20 = this.ema20Series ? (param.seriesData.get(this.ema20Series) as any) : null;
+        const e50 = this.ema50Series ? (param.seriesData.get(this.ema50Series) as any) : null;
         this.onLegendUpdate({
           time: Number(bar.time),
           open: bar.open,
@@ -146,8 +176,25 @@ export class ReplayChartAdapter {
           close: bar.close,
           volume: volBar?.value,
           changePct: bar.open ? ((bar.close - bar.open) / bar.open) * 100 : 0,
+          ema20: e20?.value,
+          ema50: e50?.value,
         });
       }
+    });
+
+    // Click handler for interactive price picking & drawing tools
+    this.chart.subscribeClick((param) => {
+      if (!param || !param.point || !this.candleSeries) return;
+      const price = this.candleSeries.coordinateToPrice(param.point.y);
+      const time = param.time ? Number(param.time) : this.lastCandle?.time || 0;
+      if (price !== null && this.onChartPriceClick) {
+        this.onChartPriceClick(Number(price), time);
+      }
+    });
+
+    // Notify overlay when timeScale scrolls/zooms
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      this.notifyVisualChange();
     });
 
     // Auto-resize on container size change
@@ -159,14 +206,116 @@ export class ReplayChartAdapter {
         const height = entry.contentRect.height;
         if (width > 0 && height > 0) {
           this.chart.applyOptions({ width, height });
+          this.notifyVisualChange();
         }
       });
       this.resizeObserver.observe(container);
     }
   }
 
+  public setOnPriceClick(cb?: (price: number, time: number) => void): void {
+    this.onChartPriceClick = cb;
+  }
+
+  public subscribeVisualChange(cb: () => void): () => void {
+    this.visualChangeListeners.add(cb);
+    return () => this.visualChangeListeners.delete(cb);
+  }
+
+  private notifyVisualChange(): void {
+    for (const cb of this.visualChangeListeners) {
+      try {
+        cb();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  public priceToCoordinate(price: number): number | null {
+    if (!this.candleSeries) return null;
+    const y = this.candleSeries.priceToCoordinate(price);
+    return y !== null ? Number(y) : null;
+  }
+
+  public coordinateToPrice(y: number): number | null {
+    if (!this.candleSeries) return null;
+    const p = this.candleSeries.coordinateToPrice(y);
+    return p !== null ? Number(p) : null;
+  }
+
+  public timeToCoordinate(timeSec: number): number | null {
+    if (!this.chart) return null;
+    const x = this.chart.timeScale().timeToCoordinate(timeSec as UTCTimestamp);
+    if (x !== null) return Number(x);
+    if (this.allCandles.length > 0) {
+      let nearest = this.allCandles[0];
+      let minDiff = Math.abs(nearest.time - timeSec);
+      for (const c of this.allCandles) {
+        const diff = Math.abs(c.time - timeSec);
+        if (diff < minDiff) {
+          minDiff = diff;
+          nearest = c;
+        }
+      }
+      const nx = this.chart.timeScale().timeToCoordinate(nearest.time as UTCTimestamp);
+      return nx !== null ? Number(nx) : null;
+    }
+    return null;
+  }
+
+  public coordinateToTime(x: number): number | null {
+    if (!this.chart) return null;
+    const t = this.chart.timeScale().coordinateToTime(x);
+    if (t !== null) return Number(t);
+    return this.lastCandle?.time || null;
+  }
+
+  public setEmaVisible(visible: boolean): void {
+    this.showEma = visible;
+    this.ema20Series?.applyOptions({ visible });
+    this.ema50Series?.applyOptions({ visible });
+  }
+
+  private computeEmaSeries(candles: ReplayCandleData[], period: number): Array<{ time: UTCTimestamp; value: number }> {
+    if (candles.length === 0) return [];
+    const k = 2 / (period + 1);
+    let ema = candles[0].close;
+    const out: Array<{ time: UTCTimestamp; value: number }> = [];
+    for (let i = 0; i < candles.length; i++) {
+      ema = i === 0 ? candles[i].close : candles[i].close * k + ema * (1 - k);
+      out.push({ time: candles[i].time as UTCTimestamp, value: ema });
+    }
+    return out;
+  }
+
+  private refreshIndicators(): void {
+    if (!this.ema20Series || !this.ema50Series) return;
+    if (!this.showEma || this.allCandles.length === 0) {
+      this.ema20Series.setData([]);
+      this.ema50Series.setData([]);
+      return;
+    }
+    this.ema20Series.setData(this.computeEmaSeries(this.allCandles, 20));
+    this.ema50Series.setData(this.computeEmaSeries(this.allCandles, 50));
+  }
+
   public setCandles(candles: ReplayCandleData[]): void {
     if (!this.candleSeries) return;
+    this.allCandles = [...candles];
+
+    // Detect precision automatically from price magnitude
+    if (candles.length > 0) {
+      const samplePrice = candles[candles.length - 1].close;
+      const isForexFourDec = samplePrice > 0 && samplePrice < 10;
+      this.candleSeries.applyOptions({
+        priceFormat: {
+          type: 'price',
+          precision: isForexFourDec ? 5 : samplePrice < 200 ? 3 : 2,
+          minMove: isForexFourDec ? 0.00001 : samplePrice < 200 ? 0.001 : 0.01,
+        },
+      });
+    }
 
     const formattedCandles = candles.map((c) => ({
       time: c.time as UTCTimestamp,
@@ -177,6 +326,7 @@ export class ReplayChartAdapter {
     }));
 
     this.candleSeries.setData(formattedCandles);
+    this.refreshIndicators();
 
     if (this.volumeSeries) {
       const formattedVolumes = candles.map((c) => ({
@@ -195,10 +345,18 @@ export class ReplayChartAdapter {
     }
 
     this.chart?.timeScale().scrollToRealTime();
+    this.notifyVisualChange();
   }
 
   public updateCandle(candle: ReplayCandleData): void {
     if (!this.candleSeries) return;
+
+    const existingIdx = this.allCandles.findIndex((c) => c.time === candle.time);
+    if (existingIdx >= 0) {
+      this.allCandles[existingIdx] = candle;
+    } else {
+      this.allCandles.push(candle);
+    }
 
     this.candleSeries.update({
       time: candle.time as UTCTimestamp,
@@ -207,6 +365,8 @@ export class ReplayChartAdapter {
       low: candle.low,
       close: candle.close,
     });
+
+    this.refreshIndicators();
 
     if (this.volumeSeries) {
       this.volumeSeries.update({
@@ -220,14 +380,17 @@ export class ReplayChartAdapter {
     if (this.onLegendUpdate) {
       this.onLegendUpdate(this.formatLegend(candle));
     }
+    this.notifyVisualChange();
   }
 
   public fitContent(): void {
     this.chart?.timeScale().fitContent();
+    this.notifyVisualChange();
   }
 
   public scrollToRealTime(): void {
     this.chart?.timeScale().scrollToRealTime();
+    this.notifyVisualChange();
   }
 
   private formatLegend(c: ReplayCandleData): LegendOHLC {
@@ -259,18 +422,16 @@ export class ReplayChartAdapter {
     for (const pos of positions) {
       if (pos.status !== 'OPEN') continue;
 
-      // Entry Price Line
       const entryLine = this.candleSeries.createPriceLine({
         price: pos.entryPrice,
         color: pos.direction === 'BUY' ? '#22d3ee' : '#f43f5e',
-        lineWidth: 1,
+        lineWidth: 2,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
         title: `${pos.direction} #${pos.id.slice(-4)} (${pos.quantity})`,
       });
       this.tradePriceLines.push(entryLine);
 
-      // Stop Loss Line
       if (pos.stopLoss) {
         const slLine = this.candleSeries.createPriceLine({
           price: pos.stopLoss,
@@ -283,7 +444,6 @@ export class ReplayChartAdapter {
         this.tradePriceLines.push(slLine);
       }
 
-      // Take Profit Line
       if (pos.takeProfit) {
         const tpLine = this.candleSeries.createPriceLine({
           price: pos.takeProfit,
@@ -323,6 +483,7 @@ export class ReplayChartAdapter {
       }
     }
     this.tradePriceLines = [];
+    this.visualChangeListeners.clear();
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -334,6 +495,9 @@ export class ReplayChartAdapter {
     }
     this.candleSeries = null;
     this.volumeSeries = null;
+    this.ema20Series = null;
+    this.ema50Series = null;
     this.lastCandle = null;
+    this.allCandles = [];
   }
 }

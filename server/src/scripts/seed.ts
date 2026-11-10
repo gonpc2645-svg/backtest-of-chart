@@ -35,13 +35,21 @@ async function runInitialVerification() {
     }
   }
 
-  // 3. Test Dukascopy Ingestion (Forex / Metals)
-  console.log('\n3. Testing Dukascopy Ingestion (Forex / Metals)...');
-  const testDukascopySymbols = ['DUKASCOPY:EURUSD', 'DUKASCOPY:XAUUSD'];
+  // 3. Test Dukascopy Ingestion (Forex / Metals / Indices)
+  console.log('\n3. Ingesting Dukascopy Historical M1 (Forex / Metals / Indices)...');
+  const testDukascopySymbols = [
+    'DUKASCOPY:XAUUSD',
+    'DUKASCOPY:EURUSD',
+    'DUKASCOPY:GBPUSD',
+    'DUKASCOPY:USDJPY',
+    'DUKASCOPY:NAS100',
+    'DUKASCOPY:US30',
+  ];
   for (const sym of testDukascopySymbols) {
     try {
-      console.log(`   -> Attempting ingestion for ${sym}...`);
-      await worker.ingestHistoricalM1(sym, startTimestamp, endTimestamp);
+      console.log(`   -> Ingesting verified M1 data for ${sym}...`);
+      const res = await worker.ingestHistoricalM1(sym, startTimestamp, endTimestamp);
+      console.log(`      ✓ Stored ${res.insertedCount} valid M1 candles for ${sym} (Rejected: ${res.rejectedCount})`);
     } catch (err: unknown) {
       console.log(`   -> Dukascopy status for ${sym}: ${err instanceof Error ? err.message : String(err)}`);
     }

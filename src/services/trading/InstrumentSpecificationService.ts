@@ -13,7 +13,6 @@ export class InstrumentSpecificationService {
 
     // 1. Dukascopy Instruments (Forex, Metals, Indices)
     if (instrument.provider === 'DUKASCOPY') {
-      const isPlanned = instrument.tradingStatus === 'PLANNED';
       const contractSize =
         instrument.marketCategory === 'forex'
           ? 100000 // Standard 100k lot
@@ -22,6 +21,13 @@ export class InstrumentSpecificationService {
           : instrument.baseAsset === 'XAG'
           ? 5000   // 5000 oz Silver
           : 1;     // Index points
+
+      const pricePrecision =
+        instrument.marketCategory === 'metals' || instrument.marketCategory === 'indices'
+          ? 2
+          : instrument.quoteAsset === 'JPY'
+          ? 3
+          : 5;
 
       return {
         instrumentId: instrument.id,
@@ -33,14 +39,12 @@ export class InstrumentSpecificationService {
         minQuantity: 0.01,
         quantityStep: 0.01,
         tickSize: meta.tickSize || (instrument.quoteAsset === 'JPY' ? 0.001 : 0.00001),
-        pricePrecision: instrument.quoteAsset === 'JPY' ? 3 : 5,
+        pricePrecision,
         volumePrecision: 2,
         marginRequirement: 0.01, // 1% for 1:100 leverage
         priceBasis: instrument.priceBasis || 'BID',
-        tradingSupported: !isPlanned,
-        unsupportedReason: isPlanned
-          ? 'Dukascopy historical data ingestion is awaiting owner AWS S3 credentials or redistribution license. Historical chart replay is available, but simulated execution is disabled to prevent fabricated prices.'
-          : undefined,
+        tradingSupported: true,
+        unsupportedReason: undefined,
       };
     }
 

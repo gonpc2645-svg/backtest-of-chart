@@ -139,7 +139,7 @@ apiRouter.get('/markets/:market/instruments', (req: Request, res: Response) => {
 });
 
 // 5. GET /api/market-data/coverage
-apiRouter.get('/market-data/coverage', (req: Request, res: Response) => {
+apiRouter.get('/market-data/coverage', async (req: Request, res: Response) => {
   try {
     const instrumentId = req.query.instrument ? String(req.query.instrument).trim().toUpperCase() : '';
     if (!instrumentId) {
@@ -152,8 +152,14 @@ apiRouter.get('/market-data/coverage', (req: Request, res: Response) => {
     }
 
     let coverage = marketDataService.getCoverage(instrumentId);
-    if (!coverage) {
-      // Compute initial coverage if not yet saved
+    if (!coverage || coverage.totalCandlesCount === 0) {
+      try {
+        const end = Date.now();
+        const start = end - 24 * 60 * 60 * 1000;
+        await ingestionWorker.ingestHistoricalM1(instrument.id, start, end);
+      } catch (e) {
+        console.warn(`[AutoIngest] On-demand ingestion notice for ${instrument.id}:`, e);
+      }
       coverage = ingestionWorker.recomputeCoverage(instrument);
     }
 
