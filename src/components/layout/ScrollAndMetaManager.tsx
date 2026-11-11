@@ -12,6 +12,21 @@ const ROUTE_METADATA: Record<string, { title: string; description: string }> = {
     description:
       'Choose your market, timeframe, and historical date to prepare your simulated backtesting session on BACKTEST OF CHART.',
   },
+  '/login': {
+    title: 'Log In — BACKTEST OF CHART',
+    description:
+      'Sign in with Email or Google to access your free Backtest of Chart trader profile.',
+  },
+  '/signup': {
+    title: 'Create Free Account — BACKTEST OF CHART',
+    description:
+      'Create a free Backtest of Chart account using Google or Email.',
+  },
+  '/auth/callback': {
+    title: 'Authenticating — BACKTEST OF CHART',
+    description:
+      'Verifying your Backtest of Chart authentication session.',
+  },
   '/privacy': {
     title: 'Privacy Policy — BACKTEST OF CHART',
     description:

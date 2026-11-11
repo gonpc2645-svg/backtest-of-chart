@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { BrandLogo } from '../brand/BrandLogo';
 
 interface NavSectionItem {
@@ -25,15 +26,47 @@ const DRAWER_FEATURES = [
 
 export const Navbar: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [featuresExpanded, setFeaturesExpanded] = useState(true);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   const isReplayRoute = location.pathname.startsWith('/backtest/replay');
 
+  const userDisplayName =
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    user?.email?.split('@')[0] ||
+    'Trader';
+  const userAvatar = user?.user_metadata?.avatar_url as string | undefined;
+
   useEffect(() => {
     setDrawerOpen(false);
+    setAccountMenuOpen(false);
   }, [location.pathname, location.hash]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        accountMenuRef.current &&
+        !accountMenuRef.current.contains(event.target as Node)
+      ) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [accountMenuOpen]);
 
   const handleNavClick = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -135,6 +168,84 @@ export const Navbar: React.FC = () => {
           </nav>
 
           <div className="site-header__actions">
+            {user ? (
+              <div className="tc-account-menu" ref={accountMenuRef}>
+                <button
+                  type="button"
+                  className="tc-account-pill"
+                  aria-expanded={accountMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setAccountMenuOpen((prev) => !prev)}
+                >
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt={userDisplayName}
+                      className="tc-account-pill__avatar"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="tc-account-pill__initial" aria-hidden="true">
+                      {userDisplayName.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="tc-account-pill__name">{userDisplayName}</span>
+                </button>
+
+                {accountMenuOpen && (
+                  <div className="tc-account-dropdown" role="menu">
+                    <div className="tc-account-dropdown__header">
+                      <strong>{userDisplayName}</strong>
+                      <span>{user.email}</span>
+                    </div>
+                    <Link
+                      to="/backtest"
+                      className="tc-account-dropdown__item"
+                      role="menuitem"
+                      onClick={() => setAccountMenuOpen(false)}
+                    >
+                      Configure Backtest
+                    </Link>
+                    <Link
+                      to="/backtest/replay"
+                      className="tc-account-dropdown__item"
+                      role="menuitem"
+                      onClick={() => setAccountMenuOpen(false)}
+                    >
+                      Open Terminal
+                    </Link>
+                    <Link
+                      to="/backtest/analytics"
+                      className="tc-account-dropdown__item"
+                      role="menuitem"
+                      onClick={() => setAccountMenuOpen(false)}
+                    >
+                      View Analytics
+                    </Link>
+                    <button
+                      type="button"
+                      className="tc-account-dropdown__item tc-account-dropdown__item--danger"
+                      role="menuitem"
+                      onClick={async () => {
+                        setAccountMenuOpen(false);
+                        await signOut();
+                      }}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="tc-auth-nav-link site-header__cta"
+                onClick={() => setDrawerOpen(false)}
+              >
+                Log in
+              </Link>
+            )}
+
             <Link
               to="/backtest"
               className="tc-cta-pill tc-cta-pill--sm site-header__cta"
@@ -266,6 +377,42 @@ export const Navbar: React.FC = () => {
             </div>
 
             <div className="tc-slide-drawer__footer">
+              {user ? (
+                <div className="tc-drawer-user-box">
+                  <div className="tc-drawer-user-box__info">
+                    <strong>{userDisplayName}</strong>
+                    <span>{user.email}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    onClick={async () => {
+                      await signOut();
+                      setDrawerOpen(false);
+                    }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <div className="tc-drawer-auth-row">
+                  <Link
+                    to="/login"
+                    className="tc-ghost-pill tc-ghost-pill--full"
+                    onClick={() => setDrawerOpen(false)}
+                  >
+                    Log In
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="tc-ghost-pill tc-ghost-pill--full"
+                    onClick={() => setDrawerOpen(false)}
+                  >
+                    Sign Up
+                  </Link>
+                </div>
+              )}
+
               <Link
                 to="/backtest/replay"
                 className="tc-ghost-pill tc-ghost-pill--full"

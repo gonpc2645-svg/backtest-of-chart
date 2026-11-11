@@ -136,8 +136,18 @@ export const Footer: React.FC = () => {
             </div>
 
             <div className="site-footer__col">
-              <h3 className="site-footer__heading">Legals &amp; Support</h3>
+              <h3 className="site-footer__heading">Account &amp; Legals</h3>
               <ul className="site-footer__list">
+                <li>
+                  <Link to="/login" className="site-footer__link">
+                    Log In
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/signup" className="site-footer__link">
+                    Create Free Account
+                  </Link>
+                </li>
                 <li>
                   <Link to="/privacy" className="site-footer__link">
                     Privacy Policy
