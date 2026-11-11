@@ -48,6 +48,14 @@ export interface ReplayDataGap {
   missingMinutes: number;
 }
 
+export interface ReplayDataProvenance {
+  sources: string[];
+  resolution: '1m' | '5m' | '1h';
+  isCanonicalM1: boolean;
+  notes: string[];
+  candleCount: number;
+}
+
 export interface ReplayEventListenerMap {
   stateChange: (state: ReplayState) => void;
   candleUpdate: (candle: ReplayCandleData, isNewBar: boolean) => void;
@@ -57,4 +65,5 @@ export interface ReplayEventListenerMap {
   speedChange: (speed: ReplaySpeed) => void;
   timeframeChange: (timeframe: TimeframeId) => void;
   m1Candle: (m1: ApiCandle) => void;
+  provenanceUpdate: (provenance: ReplayDataProvenance) => void;
 }

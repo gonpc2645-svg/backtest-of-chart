@@ -1,13 +1,14 @@
 import {
   ReplayCandleData,
   ReplayDataGap,
+  ReplayDataProvenance,
   ReplayEventListenerMap,
   ReplaySession,
   ReplaySpeed,
   ReplayState,
   TimeframeId,
 } from './types';
-import { MarketDataApi, ApiCandle } from '../marketDataApi';
+import { ApiCandle } from '../marketDataApi';
 import { ReplayTimeline } from './ReplayTimeline';
 import { ReplayClock } from './ReplayClock';
 import { ReplayCandleProcessor } from './ReplayCandleProcessor';
@@ -20,6 +21,7 @@ export class ReplayEngine {
   private clock: ReplayClock;
   private currentBars: ReplayCandleData[] = [];
   private currentGap: ReplayDataGap | null = null;
+  private provenance: ReplayDataProvenance | null = null;
 
   // Event listeners
   private listeners: {
@@ -98,6 +100,10 @@ export class ReplayEngine {
     return this.timeline?.getCurrentCandle() || null;
   }
 
+  public getProvenance(): ReplayDataProvenance | null {
+    return this.provenance;
+  }
+
   private setState(newState: ReplayState): void {
     if (this.state === newState) return;
     this.state = newState;
@@ -120,16 +126,7 @@ export class ReplayEngine {
   public async initialize(): Promise<void> {
     this.setState('INITIALIZING');
     try {
-      // 1. Initialize session via backend verification
-      await MarketDataApi.initReplaySession({
-        instrumentId: this.session.instrumentId,
-        timeframe: this.session.timeframe,
-        startTimestamp: this.session.startTimestamp,
-        endTimestamp: this.session.endTimestamp,
-        contextBarsCount: 60,
-      });
-
-      // Compute context range in ms (at least 60 bars before startTimestamp)
+      // Compute context lookback in ms cleanly across weekend closures (at least 72h for non-crypto intraday)
       const tfMinutes =
         this.session.timeframe === 'D1'
           ? 1440
@@ -145,9 +142,14 @@ export class ReplayEngine {
           ? 5
           : 1;
 
-      const contextStartTs = Math.max(0, this.session.startTimestamp - 60 * tfMinutes * 60 * 1000);
+      const rawContextMs = 60 * tfMinutes * 60 * 1000;
+      const maxReasonableLookbackMs =
+        this.session.timeframe === 'D1' ? 30 * 86400000 : this.session.timeframe === 'H4' ? 10 * 86400000 : 5 * 86400000;
+      const minMarketLookbackMs = this.session.provider === 'DUKASCOPY' ? 72 * 3600000 : 24 * 3600000;
+      const contextLookbackMs = Math.max(minMarketLookbackMs, Math.min(rawContextMs, maxReasonableLookbackMs));
+      const contextStartTs = Math.max(0, this.session.startTimestamp - contextLookbackMs);
 
-      // 2. Setup timeline
+      // 1. Setup timeline
       this.timeline = new ReplayTimeline(
         this.session.instrumentId,
         this.session.startTimestamp,
@@ -155,20 +157,33 @@ export class ReplayEngine {
         this.session.cursor || this.session.startTimestamp
       );
 
-      // 3. Load M1 candles from contextStartTs to endTimestamp
+      // 2. Load genuine historical candles from contextStartTs to endTimestamp
       await this.timeline.loadRange(contextStartTs, this.session.endTimestamp);
 
-      // 4. Reconstruct chart bars up to current cursor (STRICT ZERO FUTURE LEAKAGE)
+      this.provenance = this.timeline.getProvenance();
+      if (this.provenance) {
+        this.emit('provenanceUpdate', this.provenance);
+      }
+
+      // 3. Reconstruct chart bars up to current cursor (STRICT ZERO FUTURE LEAKAGE)
       let revealedM1 = this.timeline.getRevealedCandles();
       if (revealedM1.length === 0 && this.timeline.getCandleCount() > 0) {
-        const fallbackIdx = Math.min(30, Math.floor(this.timeline.getCandleCount() / 3));
-        const firstValidTs = this.timeline.getCandleTimestampAt(fallbackIdx);
+        const firstValidTs = this.timeline.getCandleTimestampAt(0);
         if (firstValidTs) {
-          this.session.cursor = firstValidTs;
           this.timeline.setCursor(firstValidTs);
+          this.session.cursor = this.timeline.getCursor();
           revealedM1 = this.timeline.getRevealedCandles();
         }
       }
+
+      if (!this.timeline.hasCandlesInPlaybackWindow()) {
+        const fromStr = new Date(this.session.startTimestamp).toISOString().slice(0, 10);
+        const toStr = new Date(this.session.endTimestamp).toISOString().slice(0, 10);
+        throw new Error(
+          `No genuine market candles found for ${this.session.providerSymbol} between ${fromStr} and ${toStr} UTC. Markets may be closed (weekend/holiday) or in the future — please choose an active trading date.`
+        );
+      }
+
       this.currentBars = ReplayCandleProcessor.reconstructBarsUpToCursor(
         revealedM1,
         this.session.timeframe,
@@ -357,10 +372,12 @@ export class ReplayEngine {
       return false;
     }
 
-    // Check for historical data gap (> 60s) before advancing
-    if (!ignoreGap) {
+    // Pause only on severe unexpected M1 data outages (ignore normal rollovers, holidays, weekends, and non-1m fallbacks)
+    const isCanonical1m = !this.provenance || this.provenance.resolution === '1m';
+    const maxSilentGapMinutes = this.session.provider === 'DUKASCOPY' ? 96 * 60 : 6 * 60;
+    if (!ignoreGap && isCanonical1m) {
       const gapCheck = this.timeline.peekGap();
-      if (gapCheck && gapCheck.gap) {
+      if (gapCheck && gapCheck.gap && gapCheck.gap.missingMinutes > maxSilentGapMinutes) {
         this.clock.stop();
         this.currentGap = gapCheck.gap;
         this.setState('DATA_GAP');

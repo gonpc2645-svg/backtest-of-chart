@@ -81,3 +81,16 @@ CREATE TABLE IF NOT EXISTS data_ingestion_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON data_ingestion_jobs(job_status);
 CREATE INDEX IF NOT EXISTS idx_jobs_inst ON data_ingestion_jobs(instrument_id, started_at DESC);
+
+-- 5. Per-UTC-Day Provenance Cache (prevents redundant external fetches & flags weekend closures)
+CREATE TABLE IF NOT EXISTS fetched_day_cache (
+  instrument_id TEXT NOT NULL,
+  utc_date TEXT NOT NULL,
+  source TEXT NOT NULL,
+  resolution TEXT NOT NULL,
+  is_canonical_m1 INTEGER NOT NULL DEFAULT 1,
+  candle_count INTEGER NOT NULL DEFAULT 0,
+  note TEXT,
+  fetched_at INTEGER NOT NULL,
+  PRIMARY KEY (instrument_id, utc_date)
+);

@@ -4,6 +4,9 @@ import { DatabaseService } from '../database/connection.js';
 import { IngestionWorker } from '../services/ingestionWorker.js';
 import { MarketDataService } from '../services/marketDataService.js';
 import { RequestValidator } from '../validation/requestValidator.js';
+import { CandleValidator } from '../validation/candleValidator.js';
+import { CanonicalCandle } from '../types/marketData.js';
+import { fetchRealUtcDayFromProviders, parseUtcDateStr } from '../../../shared/historicalProvider.js';
 
 export const apiRouter = Router();
 
@@ -173,6 +176,138 @@ apiRouter.get('/market-data/coverage', async (req: Request, res: Response) => {
   }
 });
 
+const inFlightDayFetches = new Map<string, Promise<any>>();
+
+async function getOrFetchUtcDayCandles(instrumentId: string, dateStr: string) {
+  const parsedDate = parseUtcDateStr(dateStr);
+  if (!parsedDate) {
+    throw new Error(`Invalid date format "${dateStr}". Expected YYYY-MM-DD.`);
+  }
+
+  let cleanInst = instrumentId.trim().toUpperCase();
+  let instrument = marketDataService.getInstrumentById(cleanInst);
+  if (!instrument && !cleanInst.includes(':')) {
+    cleanInst = cleanInst.endsWith('USDT') ? `BINANCE:${cleanInst}` : `DUKASCOPY:${cleanInst}`;
+    instrument = marketDataService.getInstrumentById(cleanInst);
+  }
+  if (!instrument) {
+    throw new Error(`Instrument not found: ${instrumentId}`);
+  }
+
+  const dayStart = parsedDate.dayStartMs;
+  const dayEnd = dayStart + 86400000;
+  const meta = dbService.getFetchedDayMeta(cleanInst, dateStr);
+  const now = Date.now();
+
+  if (meta) {
+    const isFinalizedHistorical = meta.isCanonicalM1 && (dayEnd < now - 18 * 3600000 || now - meta.fetchedAt < 120000);
+    const isFreshFallback = !meta.isCanonicalM1 && now - meta.fetchedAt < 600000;
+    if (isFinalizedHistorical || isFreshFallback) {
+      const stored = dbService.getCandlesM1(cleanInst, dayStart, dayEnd - 1, 2000);
+      if (stored.length > 0 || meta.candleCount === 0) {
+        return {
+          instrumentId: cleanInst,
+          date: dateStr,
+          source: meta.source,
+          resolution: meta.resolution,
+          isCanonicalM1: meta.isCanonicalM1,
+          note: meta.note,
+          candles: stored,
+        };
+      }
+    }
+  }
+
+  const cacheKey = `${cleanInst}::${dateStr}`;
+  const existingPromise = inFlightDayFetches.get(cacheKey);
+  if (existingPromise) return existingPromise;
+
+  const task = (async () => {
+    const fetched = await fetchRealUtcDayFromProviders(cleanInst, dateStr);
+    const canonical: CanonicalCandle[] = fetched.candles.map((c) => ({
+      provider: instrument!.provider,
+      instrumentId: cleanInst,
+      timestamp: c.timestamp,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+      volumeDefinition:
+        instrument!.provider === 'BINANCE'
+          ? 'BASE_ASSET_VOLUME'
+          : c.volume !== null
+          ? 'TICK_VOLUME'
+          : 'UNAVAILABLE',
+      priceBasis: instrument!.priceBasis,
+      sourceInterval: fetched.resolution,
+      sourceMetadata: {
+        source: fetched.source,
+        resolution: fetched.resolution,
+        isCanonicalM1: fetched.isCanonicalM1,
+      },
+      ingestedAt: Date.now(),
+    }));
+
+    const validation = CandleValidator.validateBatch(canonical);
+    if (validation.validCandles.length > 0) {
+      // Only overwrite stored day candles if canonical M1 or no canonical M1 exists yet
+      dbService.insertCandlesBatch(validation.validCandles, fetched.isCanonicalM1);
+    }
+
+    dbService.upsertFetchedDayMeta({
+      instrumentId: cleanInst,
+      utcDate: dateStr,
+      source: fetched.source,
+      resolution: fetched.resolution,
+      isCanonicalM1: fetched.isCanonicalM1,
+      candleCount: validation.validCandles.length,
+      note: fetched.note,
+      fetchedAt: Date.now(),
+    });
+
+    if (fetched.isCanonicalM1 && validation.validCandles.length > 0) {
+      ingestionWorker.recomputeCoverage(instrument!);
+    }
+
+    return {
+      instrumentId: cleanInst,
+      date: dateStr,
+      source: fetched.source,
+      resolution: fetched.resolution,
+      isCanonicalM1: fetched.isCanonicalM1,
+      isWeekendOrHoliday: fetched.isWeekendOrHoliday,
+      note: fetched.note,
+      candles: validation.validCandles,
+    };
+  })().finally(() => {
+    inFlightDayFetches.delete(cacheKey);
+  });
+
+  inFlightDayFetches.set(cacheKey, task);
+  return task;
+}
+
+// 6b. GET /api/market-data/day (Real Per-UTC-Day Historical Loader with SQLite Cache)
+apiRouter.get('/market-data/day', async (req: Request, res: Response) => {
+  try {
+    const instrument = req.query.instrument ? String(req.query.instrument).trim().toUpperCase() : '';
+    const date = req.query.date ? String(req.query.date).trim() : '';
+    if (!instrument) {
+      return res.status(400).json({ success: false, error: 'Query parameter "instrument" is required.' });
+    }
+    if (!date) {
+      return res.status(400).json({ success: false, error: 'Query parameter "date" (YYYY-MM-DD) is required.' });
+    }
+    const result = await getOrFetchUtcDayCandles(instrument, date);
+    res.json({ success: true, ...result });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const status = msg.includes('not found') ? 404 : msg.includes('Invalid date') ? 400 : 502;
+    res.status(status).json({ success: false, error: msg });
+  }
+});
+
 // 6. GET /api/market-data/candles
 apiRouter.get('/market-data/candles', (req: Request, res: Response) => {
   try {
@@ -259,7 +394,7 @@ apiRouter.get('/ingestion/status', (_req: Request, res: Response) => {
 // ========================================================================
 
 // 9. POST /api/replay/initialize
-apiRouter.post('/replay/initialize', (req: Request, res: Response) => {
+apiRouter.post('/replay/initialize', async (req: Request, res: Response) => {
   try {
     const { instrumentId, timeframe, startTimestamp, endTimestamp, contextBarsCount } = req.body || {};
 
@@ -287,34 +422,41 @@ apiRouter.post('/replay/initialize', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'endTimestamp must be greater than startTimestamp.' });
     }
 
-    // Check coverage
-    const coverage = marketDataService.getCoverage(cleanInst);
-    if (!coverage || coverage.totalCandlesCount === 0) {
-      return res.status(400).json({
-        success: false,
-        error: `No verified historical data stored for ${cleanInst}. Please ingest historical data first.`,
-      });
-    }
-
-    // Verify bounds against verified coverage
-    if (coverage.earliestVerifiedTimestamp && startTs < coverage.earliestVerifiedTimestamp - 86400000) {
-      return res.status(400).json({
-        success: false,
-        error: `Requested start time is before earliest verified data: ${new Date(coverage.earliestVerifiedTimestamp).toISOString()}`,
-      });
-    }
-
     // Calculate historical context candles strictly <= startTimestamp (Zero future leakage!)
     const barsCount = Math.min(Math.max(Number(contextBarsCount) || 50, 10), 200);
     const minutesPerBar = tf === 'D1' ? 1440 : tf === 'H4' ? 240 : tf === 'H1' ? 60 : tf === 'M30' ? 30 : tf === 'M15' ? 15 : tf === 'M5' ? 5 : 1;
-    const contextStartTs = Math.max(0, startTs - barsCount * minutesPerBar * 60 * 1000);
+    const lookbackMs = Math.max(barsCount * minutesPerBar * 60 * 1000, instrument.provider === 'DUKASCOPY' ? 72 * 3600000 : 0);
+    const contextStartTs = Math.max(0, startTs - lookbackMs);
 
-    // Retrieve M1 context candles strictly <= startTimestamp
-    const contextM1 = dbService.getCandlesM1(cleanInst, contextStartTs, startTs, barsCount * minutesPerBar);
+    // Ensure requested days exist in SQLite on-demand if missing (for up to 14 days)
+    const rangeCheck = dbService.getCandlesM1(cleanInst, contextStartTs, endTs, 50);
+    if (rangeCheck.length === 0) {
+      let curDay = Date.UTC(
+        new Date(contextStartTs).getUTCFullYear(),
+        new Date(contextStartTs).getUTCMonth(),
+        new Date(contextStartTs).getUTCDate()
+      );
+      const lastDay = Date.UTC(
+        new Date(endTs).getUTCFullYear(),
+        new Date(endTs).getUTCMonth(),
+        new Date(endTs).getUTCDate()
+      );
+      let daysFetched = 0;
+      while (curDay <= lastDay && daysFetched < 14) {
+        const dStr = new Date(curDay).toISOString().slice(0, 10);
+        try {
+          await getOrFetchUtcDayCandles(cleanInst, dStr);
+        } catch {
+          // continue checking remaining days
+        }
+        curDay += 86400000;
+        daysFetched++;
+      }
+    }
+
+    const coverage = marketDataService.getCoverage(cleanInst);
     const aggregatedContext = marketDataService.getCandles(cleanInst, tf, contextStartTs, startTs, barsCount);
-
-    // Count M1 candles available in the playback range
-    const playbackM1Sample = dbService.getCandlesM1(cleanInst, startTs, endTs, 10000);
+    const playbackM1Sample = dbService.getCandlesM1(cleanInst, startTs, endTs, 25000);
 
     res.json({
       success: true,
@@ -339,7 +481,7 @@ apiRouter.get('/replay/candles', (req: Request, res: Response) => {
     const instrumentId = req.query.instrument ? String(req.query.instrument).trim().toUpperCase() : '';
     const fromTs = Number(req.query.from);
     const cursorTs = Number(req.query.cursor || req.query.to);
-    const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 2000, 1), 25000);
 
     if (!instrumentId) {
       return res.status(400).json({ success: false, error: 'Query parameter "instrument" is required.' });

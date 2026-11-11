@@ -1,7 +1,6 @@
-import { ApiCandle } from '../marketDataApi';
-import { MarketDataApi } from '../marketDataApi';
+import { ApiCandle, fetchHistoricalRangeM1 } from '../marketDataApi';
 import { ReplayGapHandler } from './ReplayGapHandler';
-import { ReplayDataGap } from './types';
+import { ReplayDataGap, ReplayDataProvenance } from './types';
 
 export class ReplayTimeline {
   private instrumentId: string;
@@ -11,12 +10,17 @@ export class ReplayTimeline {
   private m1Candles: ApiCandle[] = [];
   private isFullyLoaded: boolean = false;
   private isLoading: boolean = false;
+  private provenance: ReplayDataProvenance | null = null;
 
   constructor(instrumentId: string, startTimestamp: number, endTimestamp: number, initialCursor?: number) {
     this.instrumentId = instrumentId;
     this.startTimestamp = startTimestamp;
     this.endTimestamp = endTimestamp;
     this.cursor = initialCursor ?? startTimestamp;
+  }
+
+  public getProvenance(): ReplayDataProvenance | null {
+    return this.provenance;
   }
 
   public getInstrumentId(): string {
@@ -67,8 +71,7 @@ export class ReplayTimeline {
   }
 
   /**
-   * Loads all historical M1 candles in the replay range [startTimestamp, endTimestamp] into memory.
-   * Fetches sequentially in chunks of 2000 to remain robust across long ranges.
+   * Loads all genuine historical candles in [fromTimestamp, toTimestamp] day-by-day using persistent cache.
    */
   public async loadRange(fromTimestamp?: number, toTimestamp?: number): Promise<number> {
     if (this.isLoading) return 0;
@@ -78,50 +81,33 @@ export class ReplayTimeline {
     const to = toTimestamp ?? this.endTimestamp;
 
     try {
-      const allFetched: ApiCandle[] = [];
-      let currentFrom = from;
-      const CHUNK_SIZE = 1000;
-      let safetyIterations = 0;
+      const rangeRes = await fetchHistoricalRangeM1(this.instrumentId, from, to);
 
-      while (currentFrom < to && safetyIterations < 15) {
-        safetyIterations++;
-        const resp = await MarketDataApi.getReplayCandles({
-          instrumentId: this.instrumentId,
-          from: currentFrom,
-          cursor: to,
-          limit: CHUNK_SIZE,
-        });
-
-        if (!resp.candles || resp.candles.length === 0) {
-          break;
-        }
-
-        allFetched.push(...resp.candles);
-
-        const lastCandle = resp.candles[resp.candles.length - 1];
-        if (lastCandle.timestamp >= to - 60000 || lastCandle.timestamp <= currentFrom) {
-          break;
-        }
-
-        // Advance to next minute after last retrieved candle
-        currentFrom = lastCandle.timestamp + 60000;
-      }
-
-      // Deduplicate and sort by timestamp ascending
       const map = new Map<number, ApiCandle>();
       for (const c of this.m1Candles) {
         map.set(c.timestamp, c);
       }
-      for (const c of allFetched) {
+      for (const c of rangeRes.candles) {
         map.set(c.timestamp, c);
       }
 
       this.m1Candles = Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
+      this.provenance = {
+        sources: rangeRes.sources,
+        resolution: rangeRes.resolution,
+        isCanonicalM1: rangeRes.isCanonicalM1,
+        notes: rangeRes.notes,
+        candleCount: this.m1Candles.length,
+      };
       this.isFullyLoaded = true;
       return this.m1Candles.length;
     } finally {
       this.isLoading = false;
     }
+  }
+
+  public hasCandlesInPlaybackWindow(): boolean {
+    return this.m1Candles.some((c) => c.timestamp >= this.startTimestamp && c.timestamp <= this.endTimestamp);
   }
 
   /**

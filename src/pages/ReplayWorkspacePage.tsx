@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ReplayEngine } from '../services/replay/ReplayEngine';
 import {
   ReplayDataGap,
+  ReplayDataProvenance,
   ReplaySession,
   ReplaySpeed,
   ReplayState,
@@ -53,6 +54,7 @@ export const ReplayWorkspacePage: React.FC = () => {
   const [currentTimeframe, setCurrentTimeframe] = useState<TimeframeId>('M15');
   const [currentLegend, setCurrentLegend] = useState<LegendOHLC | null>(null);
   const [dataGap, setDataGap] = useState<ReplayDataGap | null>(null);
+  const [dataProvenance, setDataProvenance] = useState<ReplayDataProvenance | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -114,6 +116,7 @@ export const ReplayWorkspacePage: React.FC = () => {
       try {
         setIsLoading(true);
         setErrorMessage(null);
+        setDataProvenance(null);
 
         let activeSession: ReplaySession | null = null;
 
@@ -129,13 +132,16 @@ export const ReplayWorkspacePage: React.FC = () => {
 
           if (queryInst && !isNaN(queryStart) && !isNaN(queryEnd) && queryEnd > queryStart) {
             const sym = queryInst.split(':')[1] || queryInst;
+            const catalogInst =
+              CANONICAL_CATALOG_INSTRUMENTS.find((i) => i.id === queryInst) ||
+              CANONICAL_CATALOG_INSTRUMENTS.find((i) => i.providerSymbol === sym);
             activeSession = {
               id: 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-              provider: queryInst.startsWith('DUKASCOPY') ? 'DUKASCOPY' : 'BINANCE',
-              instrumentId: queryInst,
-              providerSymbol: sym,
-              displayName: sym,
-              marketCategory: 'crypto',
+              provider: catalogInst?.provider || (queryInst.startsWith('DUKASCOPY') ? 'DUKASCOPY' : 'BINANCE'),
+              instrumentId: catalogInst?.id || queryInst,
+              providerSymbol: catalogInst?.providerSymbol || sym,
+              displayName: catalogInst?.displayName || sym,
+              marketCategory: catalogInst?.marketCategory || (queryInst.startsWith('DUKASCOPY') ? 'forex' : 'crypto'),
               timeframe: queryTf,
               startTimestamp: queryStart,
               endTimestamp: queryEnd,
@@ -183,8 +189,8 @@ export const ReplayWorkspacePage: React.FC = () => {
           await ReplayPersistence.saveSession(activeSession);
         }
 
-        // Normalize legacy sessions that were auto-seeded with the 2026-11-09 system clock
-        if (activeSession.startTimestamp > 1790000000000) {
+        // Normalize accidentally seeded future-dated sessions (> tomorrow UTC)
+        if (activeSession.startTimestamp > Date.now() + 86400000) {
           const normStart = Date.parse('2025-01-14T00:00:00Z');
           const normEnd = Date.parse('2025-01-17T23:59:00Z');
           activeSession = {
@@ -296,6 +302,12 @@ export const ReplayWorkspacePage: React.FC = () => {
 
     engine.on('gapDetected', (gap) => {
       setDataGap(gap);
+    });
+
+    engine.on('provenanceUpdate', (prov) => {
+      if (!isDisposed) {
+        setDataProvenance(prov);
+      }
     });
 
     engine.on('error', (err) => {
@@ -621,6 +633,7 @@ export const ReplayWorkspacePage: React.FC = () => {
 
       setIsLoading(true);
       setErrorMessage(null);
+      setDataProvenance(null);
       await ReplayPersistence.saveSession(updatedSession);
       setSession(updatedSession);
     },
@@ -648,11 +661,61 @@ export const ReplayWorkspacePage: React.FC = () => {
 
       setIsLoading(true);
       setErrorMessage(null);
+      setDataProvenance(null);
       await ReplayPersistence.saveSession(updatedSession);
       setSession(updatedSession);
     },
     [session, currentTimeframe]
   );
+
+  const handleRetrySessionLoad = useCallback(() => {
+    if (!session) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    setDataProvenance(null);
+    setSession({
+      ...session,
+      updatedAt: Date.now(),
+    });
+  }, [session]);
+
+  const feedBadge = (() => {
+    if (!dataProvenance || !dataProvenance.sources || dataProvenance.sources.length === 0) return null;
+    const sources = dataProvenance.sources;
+    const hasDukascopy = sources.includes('DUKASCOPY_BI5');
+    const hasFxcm = sources.includes('FXCM_M1');
+    const hasBinance = sources.includes('BINANCE_SPOT_1M');
+    const hasBitget = sources.some((s) => s.startsWith('BITGET_'));
+    const hasYahoo = sources.some((s) => s.startsWith('YAHOO_'));
+    const hasSqlite = sources.some((s) => s.startsWith('SQLITE_'));
+
+    let label = 'Verified Real Feed';
+    let isFallback = !dataProvenance.isCanonicalM1;
+
+    if (hasDukascopy && hasFxcm) label = 'Dukascopy + FXCM M1';
+    else if (hasDukascopy && hasBitget) label = 'Dukascopy + XAUT 1m Proxy';
+    else if (hasDukascopy && hasYahoo) label = `Dukascopy + Yahoo ${dataProvenance.resolution.toUpperCase()}`;
+    else if (hasDukascopy) label = 'Dukascopy BI5 1m';
+    else if (hasFxcm) label = 'FXCM M1';
+    else if (hasBinance) label = 'Binance Spot 1m';
+    else if (hasBitget && !hasDukascopy) {
+      label = 'Bitget XAUT 1m Proxy';
+      isFallback = true;
+    } else if (hasYahoo && !hasDukascopy && !hasFxcm && !hasBinance) {
+      label = `Yahoo ${dataProvenance.resolution.toUpperCase()} Fallback`;
+      isFallback = true;
+    } else if (hasSqlite) {
+      label = `Verified DB (${dataProvenance.resolution.toUpperCase()})`;
+    }
+
+    const title = [
+      `Data Provider: ${sources.join(', ')}`,
+      `Resolution: ${dataProvenance.resolution} (${dataProvenance.candleCount.toLocaleString()} loaded bars)`,
+      ...(dataProvenance.notes || []),
+    ].join(' | ');
+
+    return { label, isFallback, title };
+  })();
 
   const currentPrice = getCurrentPrice();
   const activeSessionLabel = cursor ? detectTradingSession(cursor) : 'London';
@@ -771,6 +834,22 @@ export const ReplayWorkspacePage: React.FC = () => {
         </div>
 
         <div className="replay-header__right">
+          {/* Genuine Data Provider Provenance Pill */}
+          {feedBadge && (
+            <span
+              className="replay-status-pill"
+              data-testid="feed-provenance-pill"
+              style={{
+                background: feedBadge.isFallback ? 'rgba(245, 158, 11, 0.14)' : 'rgba(16, 185, 129, 0.14)',
+                color: feedBadge.isFallback ? '#fbbf24' : '#34d399',
+                border: `1px solid ${feedBadge.isFallback ? 'rgba(245, 158, 11, 0.35)' : 'rgba(16, 185, 129, 0.35)'}`,
+              }}
+              title={feedBadge.title}
+            >
+              {feedBadge.isFallback ? '⚠' : '✓'} {feedBadge.label}
+            </span>
+          )}
+
           {/* Active Market Session Pill */}
           <span
             className="replay-status-pill"
@@ -930,10 +1009,26 @@ export const ReplayWorkspacePage: React.FC = () => {
           {errorMessage && (
             <div className="replay-error-screen">
               <h3 style={{ color: '#f87171' }}>Historical Replay Initialization Error</h3>
-              <p style={{ color: 'var(--text-secondary)', maxWidth: 500 }}>{errorMessage}</p>
-              <Link to="/backtest" className="btn btn--primary btn--sm" style={{ marginTop: 12 }}>
-                Return to Backtest Setup
-              </Link>
+              <p style={{ color: 'var(--text-secondary)', maxWidth: 520, textAlign: 'center' }}>{errorMessage}</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 14 }}>
+                <button type="button" className="btn btn--primary btn--sm" onClick={handleRetrySessionLoad}>
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => {
+                    setFromDateInput('2025-01-20');
+                    setToDateInput('2025-01-21');
+                    handleApplyDateRange(undefined, '2025-01-20', '2025-01-21');
+                  }}
+                >
+                  Load Weekday Sample (2025-01-20)
+                </button>
+                <Link to="/backtest" className="btn btn--secondary btn--sm">
+                  Return to Backtest Setup
+                </Link>
+              </div>
             </div>
           )}
 

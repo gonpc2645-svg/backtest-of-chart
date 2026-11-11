@@ -103,10 +103,28 @@ export class DatabaseService {
           started_at INTEGER NOT NULL,
           completed_at INTEGER
         );
+        CREATE TABLE IF NOT EXISTS fetched_day_cache (
+          instrument_id TEXT NOT NULL,
+          utc_date TEXT NOT NULL,
+          source TEXT NOT NULL,
+          resolution TEXT NOT NULL,
+          is_canonical_m1 INTEGER NOT NULL DEFAULT 1,
+          candle_count INTEGER NOT NULL DEFAULT 0,
+          note TEXT,
+          fetched_at INTEGER NOT NULL,
+          PRIMARY KEY (instrument_id, utc_date)
+        );
       `;
     }
 
     this.db.exec(schemaSql);
+
+    // Purge any legacy synthetic DUKASCOPY rows created before genuine .bi5 / FXCM verification metadata existed
+    try {
+      this.db.exec(`DELETE FROM historical_candles_m1 WHERE provider = 'DUKASCOPY' AND source_metadata IS NULL;`);
+    } catch {
+      // ignore if table not ready
+    }
   }
 
   // --- Instrument Operations ---
@@ -192,11 +210,15 @@ export class DatabaseService {
 
   // --- Candle Batch Operations ---
 
-  public insertCandlesBatch(candles: CanonicalCandle[]): { inserted: number; duplicates: number } {
+  public insertCandlesBatch(
+    candles: CanonicalCandle[],
+    replaceExisting: boolean = false
+  ): { inserted: number; duplicates: number } {
     if (candles.length === 0) return { inserted: 0, duplicates: 0 };
 
+    const conflictAction = replaceExisting ? 'INSERT OR REPLACE' : 'INSERT OR IGNORE';
     const stmt = this.db.prepare(`
-      INSERT OR IGNORE INTO historical_candles_m1 (
+      ${conflictAction} INTO historical_candles_m1 (
         provider, instrument_id, timestamp, open, high, low, close,
         volume, volume_definition, price_basis, source_interval,
         source_metadata, ingested_at
@@ -234,6 +256,68 @@ export class DatabaseService {
       inserted,
       duplicates: candles.length - inserted,
     };
+  }
+
+  public getFetchedDayMeta(instrumentId: string, utcDate: string): {
+    instrumentId: string;
+    utcDate: string;
+    source: string;
+    resolution: string;
+    isCanonicalM1: boolean;
+    candleCount: number;
+    note?: string;
+    fetchedAt: number;
+  } | null {
+    const row = this.db
+      .prepare('SELECT * FROM fetched_day_cache WHERE instrument_id = ? AND utc_date = ?')
+      .get(instrumentId, utcDate) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      instrumentId: String(row.instrument_id),
+      utcDate: String(row.utc_date),
+      source: String(row.source),
+      resolution: String(row.resolution),
+      isCanonicalM1: Number(row.is_canonical_m1) === 1,
+      candleCount: Number(row.candle_count),
+      note: row.note ? String(row.note) : undefined,
+      fetchedAt: Number(row.fetched_at),
+    };
+  }
+
+  public upsertFetchedDayMeta(meta: {
+    instrumentId: string;
+    utcDate: string;
+    source: string;
+    resolution: string;
+    isCanonicalM1: boolean;
+    candleCount: number;
+    note?: string;
+    fetchedAt: number;
+  }): void {
+    this.db
+      .prepare(`
+        INSERT INTO fetched_day_cache (
+          instrument_id, utc_date, source, resolution,
+          is_canonical_m1, candle_count, note, fetched_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(instrument_id, utc_date) DO UPDATE SET
+          source = excluded.source,
+          resolution = excluded.resolution,
+          is_canonical_m1 = excluded.is_canonical_m1,
+          candle_count = excluded.candle_count,
+          note = excluded.note,
+          fetched_at = excluded.fetched_at
+      `)
+      .run(
+        meta.instrumentId,
+        meta.utcDate,
+        meta.source,
+        meta.resolution,
+        meta.isCanonicalM1 ? 1 : 0,
+        meta.candleCount,
+        meta.note || null,
+        meta.fetchedAt
+      );
   }
 
   public getCandlesM1(

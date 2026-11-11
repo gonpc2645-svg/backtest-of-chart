@@ -142,6 +142,7 @@ export const BacktestSetupPage: React.FC = () => {
 
     let isCancelled = false;
     setIsLoadingCoverage(true);
+    setCoverage(null);
 
     MarketDataApi.getCoverage(selectedInstrument.id)
       .then((res) => {
@@ -149,7 +150,9 @@ export const BacktestSetupPage: React.FC = () => {
         setCoverage(res.coverage);
       })
       .catch((err) => {
-        console.warn('Coverage lookup error:', err.message);
+        if (isCancelled) return;
+        setCoverage(null);
+        console.warn('Coverage lookup note:', err.message);
       })
       .finally(() => {
         if (!isCancelled) setIsLoadingCoverage(false);
@@ -470,11 +473,11 @@ export const BacktestSetupPage: React.FC = () => {
                         <div className="instrument-picker-item__right">
                           {hasVerifiedM1 ? (
                             <span className="status-pill status-pill--green">
-                              1,440 M1 Verified
+                              {inst.provider === 'BINANCE' ? '1m Spot Feed' : '1m Institutional Feed'}
                             </span>
                           ) : (
                             <span className="status-pill status-pill--blue">
-                              M1 Feed Ready
+                              Historical Feed Ready
                             </span>
                           )}
                           <span className="status-pill status-pill--neutral">
@@ -499,7 +502,7 @@ export const BacktestSetupPage: React.FC = () => {
                         isVerifiedDataAvailable ? 'status-pill--green' : 'status-pill--neutral'
                       }`}
                     >
-                      {isVerifiedDataAvailable ? 'Verified M1 Coverage' : 'Awaiting Ingestion'}
+                      {isVerifiedDataAvailable ? 'Real Historical Archive Ready' : 'Select Instrument'}
                     </span>
                   </div>
 
@@ -509,15 +512,23 @@ export const BacktestSetupPage: React.FC = () => {
                       <span className="coverage-stat-box__value">{selectedInstrument.priceBasis}</span>
                     </div>
                     <div className="coverage-stat-box">
-                      <span className="coverage-stat-box__label">Stored M1 Candles</span>
+                      <span className="coverage-stat-box__label">Historical Source</span>
                       <span className="coverage-stat-box__value">
-                        {isLoadingCoverage ? '...' : coverage?.totalCandlesCount || 0}
+                        {isLoadingCoverage
+                          ? '...'
+                          : coverage && coverage.totalCandlesCount > 0
+                          ? `${coverage.totalCandlesCount.toLocaleString()} Cached M1`
+                          : 'On-Demand (Full Archive)'}
                       </span>
                     </div>
                     <div className="coverage-stat-box">
-                      <span className="coverage-stat-box__label">Coverage Status</span>
+                      <span className="coverage-stat-box__label">Feed Status</span>
                       <span className="coverage-stat-box__value">
-                        {isLoadingCoverage ? '...' : coverage?.coverageStatus || 'EMPTY'}
+                        {isLoadingCoverage
+                          ? '...'
+                          : coverage?.coverageStatus && coverage.coverageStatus !== 'EMPTY'
+                          ? coverage.coverageStatus
+                          : 'REAL ARCHIVE READY'}
                       </span>
                     </div>
                   </div>
@@ -668,6 +679,7 @@ export const BacktestSetupPage: React.FC = () => {
                     Quick Presets:
                   </span>
                   {[
+                    { label: 'Jan 20, 2025 Mon Open', from: '2025-01-20', to: '2025-01-21' },
                     { label: 'Jan 2025 CPI Week', from: '2025-01-14', to: '2025-01-17' },
                     { label: 'Mar 2025 Gold Breakout', from: '2025-03-11', to: '2025-03-14' },
                     { label: 'Dec 2024 FOMC Volatility', from: '2024-12-16', to: '2024-12-20' },
@@ -796,16 +808,10 @@ export const BacktestSetupPage: React.FC = () => {
                         {coverage?.totalCandlesCount} canonical M1 candles). Replay Workspace and
                         candle-by-candle playback will be enabled in Phase 3.
                       </>
-                    ) : selectedMarket === 'crypto' ? (
-                      <>
-                        Real Binance Spot instrument metadata is loaded. Run the ingestion worker to
-                        backfill M1 historical data for {selectedInstrument?.providerSymbol}.
-                      </>
                     ) : (
                       <>
-                        Dukascopy connector architecture is implemented. Historical ingestion is blocked
-                        pending owner-provided AWS S3 Requester-Pays credentials or commercial data
-                        redistribution agreement. Refusing to fabricate fake candles.
+                        Please select a trading instrument from Step 2 above to fetch genuine historical
+                        market candles from Dukascopy, FXCM, or Binance Spot.
                       </>
                     )}
                   </p>
