@@ -13,7 +13,6 @@ const NAV_ITEMS: NavSectionItem[] = [
   { label: 'Home', sectionId: null, href: '/' },
   { label: 'Features', sectionId: 'features', href: '/#features' },
   { label: 'Markets', sectionId: 'supported-markets', href: '/#supported-markets' },
-  { label: 'Compare', sectionId: 'pricing', href: '/#pricing' },
   { label: 'FAQ', sectionId: 'faq', href: '/#faq' },
 ];
 

@@ -86,11 +86,11 @@ export const Footer: React.FC = () => {
                 </li>
                 <li>
                   <a
-                    href="/#pricing"
+                    href="/#supported-markets"
                     className="site-footer__link"
-                    onClick={(e) => handleSectionLink(e, 'pricing')}
+                    onClick={(e) => handleSectionLink(e, 'supported-markets')}
                   >
-                    Compare Plans
+                    Markets
                   </a>
                 </li>
                 <li>

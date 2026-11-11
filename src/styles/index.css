@@ -1484,136 +1484,6 @@ textarea {
 }
 
 /* ==========================================================================
-   HOME SECTION 3: PRICING COMPARISON WITH TRADERS CASA BURNT-ORANGE CARD
-   ========================================================================== */
-
-.tc-pricing-section {
-  padding: 92px 0;
-  background: linear-gradient(180deg, #022a42 0%, #032236 100%);
-}
-
-.tc-pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  align-items: stretch;
-}
-
-.tc-plan-card {
-  border-radius: 22px;
-  padding: 30px 26px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 22px;
-  position: relative;
-}
-
-.tc-plan-card--glass {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-}
-
-.tc-plan-card--fire {
-  background: linear-gradient(180deg, #d9381e 0%, #a72008 100%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 28px 70px -15px rgba(217, 56, 30, 0.55);
-  transform: translateY(-6px);
-}
-
-.tc-plan-fire-badge {
-  align-self: flex-start;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.28);
-  color: #ffffff;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  font-weight: 700;
-}
-
-.tc-plan-name {
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
-  display: block;
-  margin-bottom: 6px;
-}
-
-.tc-plan-price {
-  font-size: 2.35rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: #ffffff;
-  margin-bottom: 8px;
-}
-
-.tc-plan-price span {
-  font-size: 0.92rem;
-  font-weight: 500;
-  opacity: 0.82;
-}
-
-.tc-plan-card__head p {
-  font-size: 0.86rem;
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.tc-plan-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-}
-
-.tc-plan-list li {
-  position: relative;
-  padding-left: 20px;
-  font-size: 0.88rem;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.tc-plan-list li::before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: #2ee6f2;
-  font-weight: 800;
-}
-
-.tc-plan-card--fire .tc-plan-list li::before {
-  color: #ffffff;
-}
-
-.tc-fire-cta-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 13px 22px;
-  border-radius: 9999px;
-  background: #ffffff;
-  color: #a72008;
-  font-weight: 800;
-  font-size: 0.94rem;
-  transition: transform var(--transition-fast);
-}
-
-.tc-fire-cta-btn:hover {
-  transform: translateY(-2px);
-}
-
-.tc-plan-tag-muted {
-  display: inline-flex;
-  justify-content: center;
-  padding: 10px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* ==========================================================================
    HOME SECTION 4: PURE CHARCOAL FAQ SECTION (#171717)
    ========================================================================== */
 
@@ -1974,11 +1844,13 @@ textarea {
   color: rgba(255, 255, 255, 0.76);
 }
 
+.setup-page__container {
+  max-width: 960px;
+}
+
 .setup-workspace-layout {
-  display: grid;
-  grid-template-columns: 1.45fr 0.85fr;
-  gap: 28px;
-  align-items: start;
+  display: block;
+  width: 100%;
 }
 
 .setup-form {
@@ -2241,91 +2113,11 @@ textarea {
   color: var(--text-muted);
 }
 
-.setup-summary-sidebar {
-  position: sticky;
-  top: 86px;
-}
-
-.setup-summary-card {
-  padding: 24px;
-}
-
-.setup-summary-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.setup-summary-card__title {
-  font-family: var(--font-mono);
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.setup-summary-list {
+.setup-cta-actions {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  margin-bottom: 20px;
-}
-
-.setup-summary-list__row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.85rem;
-}
-
-.setup-summary-list__row dt {
-  color: var(--text-muted);
-}
-
-.setup-summary-list__row dd {
-  font-family: var(--font-mono);
-  text-align: right;
-}
-
-.setup-summary-card__roadmap {
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 16px;
-}
-
-.setup-summary-card__roadmap-title {
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  margin-bottom: 10px;
-}
-
-.setup-roadmap-list {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.setup-roadmap-list__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.8rem;
-}
-
-.setup-roadmap-list__phase {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  padding: 2px 7px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.setup-summary-card__disclaimer {
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.75rem;
-  color: var(--text-dim);
+  align-items: flex-start;
+  gap: 12px;
 }
 
 /* Legal & Contact Pages */
@@ -2427,8 +2219,7 @@ textarea {
   .tc-hero__inner,
   .tc-feature-showcase,
   .tc-feature-showcase--reverse,
-  .tc-faq-grid,
-  .setup-workspace-layout {
+  .tc-faq-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2436,13 +2227,8 @@ textarea {
     order: 0;
   }
 
-  .tc-bento-two-col,
-  .tc-pricing-grid {
+  .tc-bento-two-col {
     grid-template-columns: 1fr;
-  }
-
-  .tc-plan-card--fire {
-    transform: none;
   }
 
   .tc-kpi-mini-grid {

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  BRAND_IDENTITY,
   MARKET_CATEGORIES,
   TIMEFRAME_OPTIONS,
 } from '../data/platformData';
@@ -294,7 +293,7 @@ export const BacktestSetupPage: React.FC = () => {
         </header>
 
         <div className="setup-workspace-layout">
-          {/* Left Column: Setup Form Sections 1 - 5 */}
+          {/* Setup Form Sections 1 - 5 */}
           <form
             className="setup-form"
             onSubmit={handleContinueToWorkspace}
@@ -885,113 +884,6 @@ export const BacktestSetupPage: React.FC = () => {
               )}
             </section>
           </form>
-
-          {/* Right Column: Sticky Session Configuration Summary & Roadmap Sidebar */}
-          <aside
-            className="setup-summary-sidebar"
-            aria-label="Current Session Configuration Summary"
-          >
-            <div className="surface-card setup-summary-card">
-              <div className="setup-summary-card__header">
-                <h2 className="setup-summary-card__title">
-                  SESSION CONFIGURATION
-                </h2>
-                <span className="status-pill status-pill--green">Phase 1–7 Unified</span>
-              </div>
-
-              <dl className="setup-summary-list">
-                <div className="setup-summary-list__row">
-                  <dt>Market Category</dt>
-                  <dd>
-                    <strong>{currentMarketMeta.name}</strong> ({currentMarketMeta.code})
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Selected Instrument</dt>
-                  <dd>
-                    <strong>{selectedInstrument?.providerSymbol || 'None'}</strong>
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Data Provider</dt>
-                  <dd>{selectedInstrument?.provider || currentMarketMeta.intendedSource}</dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Price Basis</dt>
-                  <dd>
-                    {selectedInstrument?.priceBasis ||
-                      (currentMarketMeta.intendedSource === 'Dukascopy' ? 'BID' : 'LAST')}
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Verified M1 Candles</dt>
-                  <dd>
-                    {isVerifiedDataAvailable ? `${coverage?.totalCandlesCount} Candles` : '0 (Pending)'}
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Timeframe Resolution</dt>
-                  <dd>
-                    <strong>{currentTimeframe.label}</strong> &mdash; {currentTimeframe.fullName}
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Date Range (UTC)</dt>
-                  <dd>
-                    <strong>{startDate}</strong> &rarr; <strong>{endDate}</strong>
-                  </dd>
-                </div>
-                <div className="setup-summary-list__row">
-                  <dt>Engine Status</dt>
-                  <dd>
-                    <span style={{ color: isVerifiedDataAvailable ? '#34d399' : 'var(--text-muted)' }}>
-                      {isVerifiedDataAvailable ? 'Data Verified' : 'Catalog Connected'}
-                    </span>
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="setup-summary-card__roadmap">
-                <h3 className="setup-summary-card__roadmap-title">
-                  PLATFORM INTEGRATION ROADMAP
-                </h3>
-                <ul className="setup-roadmap-list">
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase">Phase 1</span>
-                    <span>Website Foundation &amp; Setup UI</span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#34d399' }}>Phase 2</span>
-                    <span><strong>Historical Data Engine (Binance M1 Active)</strong></span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#22d3ee' }}>Phase 3</span>
-                    <span><strong>Proprietary Replay Engine (Active)</strong></span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#a855f7' }}>Phase 4</span>
-                    <span><strong>Simulated Trading Engine (Active)</strong></span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#10b981' }}>Phase 5</span>
-                    <span><strong>Analytics &amp; Performance Reporting (Active)</strong></span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#f59e0b' }}>Phase 6</span>
-                    <span><strong>TV Advanced Adapter Ready (Lightweight Charts Active)</strong></span>
-                  </li>
-                  <li className="setup-roadmap-list__item setup-roadmap-list__item--done">
-                    <span className="setup-roadmap-list__phase" style={{ color: '#6366f1' }}>Phase 7</span>
-                    <span><strong>Production Hardened &amp; Audited</strong></span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="setup-summary-card__disclaimer">
-                {BRAND_IDENTITY.disclaimer}
-              </div>
-            </div>
-          </aside>
         </div>
       </div>
     </div>
