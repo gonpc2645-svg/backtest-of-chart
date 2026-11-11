@@ -28,7 +28,9 @@ export const AuthCallbackPage: React.FC = () => {
     }
 
     if (!supabase) {
-      setErrorMessage('Supabase authentication client is not configured yet.');
+      setErrorMessage(
+        'Cloud OAuth sign-in is not configured on this deployment yet. You can sign in with Email or continue freely as a Guest.'
+      );
       return;
     }
 

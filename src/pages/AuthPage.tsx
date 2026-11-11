@@ -97,7 +97,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login' }) => 
     setSuccessMsg(null);
 
     const trimmedEmail = email.trim();
-    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+    if (!trimmedEmail || !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
@@ -167,6 +167,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login' }) => 
   const userAvatar = user?.user_metadata?.avatar_url as string | undefined;
   const authProvider =
     (user?.app_metadata?.provider as string | undefined) || 'email';
+  const authProviderLabel =
+    authProvider === 'google'
+      ? 'Google OAuth'
+      : authProvider === 'local_db'
+      ? 'Email (Local Database)'
+      : authProvider === 'local_device'
+      ? 'Email (Saved on Device)'
+      : 'Cloud Email';
 
   return (
     <div className="auth-page">
@@ -220,7 +228,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login' }) => 
                   <h1 className="auth-profile-name">{userDisplayName}</h1>
                   <p className="auth-profile-email">{user.email}</p>
                   <span className="status-pill status-pill--green">
-                    Connected via {authProvider === 'google' ? 'Google OAuth' : 'Email'}
+                    Connected via {authProviderLabel}
                   </span>
                 </div>
               </div>
@@ -292,15 +300,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login' }) => 
                   >
                     Sign Up
                   </button>
-                </div>
-              )}
-
-              {!isConfigured && (
-                <div className="auth-alert auth-alert--warning" role="status">
-                  <strong>Supabase Setup Pending:</strong> Live Email &amp; Google auth
-                  requires <code>VITE_SUPABASE_URL</code> and{' '}
-                  <code>VITE_SUPABASE_ANON_KEY</code> in your <code>.env</code> or Netlify
-                  environment variables. You can still backtest freely as a guest below.
                 </div>
               )}
 
@@ -380,7 +379,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login' }) => 
                       <label htmlFor="auth-password" className="auth-field__label">
                         Password
                       </label>
-                      {mode === 'login' && (
+                      {mode === 'login' && isConfigured && (
                         <button
                           type="button"
                           className="auth-text-link"

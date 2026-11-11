@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { LocalAuthService } from '../services/auth/localAuthService';
 import { isSupabaseConfigured, supabase } from '../services/auth/supabaseClient';
 
 export interface AuthActionResult {
@@ -26,21 +27,35 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const NOT_CONFIGURED_MESSAGE =
-  'Supabase is not configured yet. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env or Netlify environment variables.';
+const GOOGLE_NOT_CONFIGURED_MESSAGE =
+  'Google Sign-In is not enabled on this deployment yet. Please sign up or log in with Email below — site owners can enable Google OAuth by adding VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY in Netlify Environment Variables.';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
     let isMounted = true;
+
+    if (!supabase) {
+      LocalAuthService.getSessionUser()
+        .then((result) => {
+          if (!isMounted) return;
+          setSession(null);
+          setUser(result?.user ?? null);
+        })
+        .catch((err) => {
+          console.warn('[AuthContext] Local session check warning:', err);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
 
     supabase.auth
       .getSession()
@@ -75,7 +90,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     password: string
   ): Promise<AuthActionResult> => {
-    if (!supabase) return { error: NOT_CONFIGURED_MESSAGE };
+    if (!supabase) {
+      const res = await LocalAuthService.signIn(email, password);
+      if (res.error || !res.user) {
+        return { error: res.error || 'Invalid email or password.' };
+      }
+      setSession(null);
+      setUser(res.user);
+      return { error: null };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
@@ -89,7 +113,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     fullName?: string
   ): Promise<AuthActionResult> => {
-    if (!supabase) return { error: NOT_CONFIGURED_MESSAGE };
+    if (!supabase) {
+      const res = await LocalAuthService.signUp(email, password, fullName);
+      if (res.error || !res.user) {
+        return { error: res.error || 'Could not create account.' };
+      }
+      setSession(null);
+      setUser(res.user);
+      return { error: null, requiresEmailConfirmation: false };
+    }
+
     const cleanName = fullName?.trim();
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
@@ -107,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInWithGoogle = async (): Promise<AuthActionResult> => {
-    if (!supabase) return { error: NOT_CONFIGURED_MESSAGE };
+    if (!supabase) return { error: GOOGLE_NOT_CONFIGURED_MESSAGE };
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -123,7 +156,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const sendPasswordReset = async (email: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: NOT_CONFIGURED_MESSAGE };
+    if (!supabase) {
+      return {
+        error:
+          'Password reset email delivery requires Cloud Auth (Supabase). Please create a new email account or ask the site owner to configure Supabase.',
+      };
+    }
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/auth/callback?type=recovery`,
     });
@@ -132,7 +170,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updatePassword = async (newPassword: string): Promise<AuthActionResult> => {
-    if (!supabase) return { error: NOT_CONFIGURED_MESSAGE };
+    if (!supabase) {
+      return { error: 'Password updates require an active Cloud Auth recovery session.' };
+    }
     const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
@@ -141,8 +181,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async (): Promise<void> => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    await LocalAuthService.signOut();
+    setSession(null);
+    setUser(null);
   };
 
   const value = useMemo<AuthContextValue>(

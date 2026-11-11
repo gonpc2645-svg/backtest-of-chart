@@ -114,6 +114,21 @@ export class DatabaseService {
           fetched_at INTEGER NOT NULL,
           PRIMARY KEY (instrument_id, utc_date)
         );
+        CREATE TABLE IF NOT EXISTS auth_users (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          full_name TEXT,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+          token TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL,
+          FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE CASCADE
+        );
       `;
     }
 
@@ -462,6 +477,93 @@ export class DatabaseService {
       startedAt: Number(r.started_at),
       completedAt: r.completed_at ? Number(r.completed_at) : null,
     }));
+  }
+
+  // --- Built-in Email Auth Operations ---
+
+  public createAuthUser(params: {
+    id: string;
+    email: string;
+    fullName: string | null;
+    passwordHash: string;
+    passwordSalt: string;
+    createdAt: number;
+  }): { id: string; email: string; fullName: string | null; createdAt: number } {
+    const cleanEmail = params.email.trim().toLowerCase();
+    this.db.prepare(`
+      INSERT INTO auth_users (id, email, full_name, password_hash, password_salt, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(params.id, cleanEmail, params.fullName, params.passwordHash, params.passwordSalt, params.createdAt);
+
+    return {
+      id: params.id,
+      email: cleanEmail,
+      fullName: params.fullName,
+      createdAt: params.createdAt,
+    };
+  }
+
+  public getAuthUserByEmail(email: string): {
+    id: string;
+    email: string;
+    fullName: string | null;
+    passwordHash: string;
+    passwordSalt: string;
+    createdAt: number;
+  } | null {
+    const row = this.db
+      .prepare('SELECT * FROM auth_users WHERE email = ?')
+      .get(email.trim().toLowerCase()) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      email: String(row.email),
+      fullName: row.full_name ? String(row.full_name) : null,
+      passwordHash: String(row.password_hash),
+      passwordSalt: String(row.password_salt),
+      createdAt: Number(row.created_at),
+    };
+  }
+
+  public createAuthSession(token: string, userId: string, createdAt: number, expiresAt: number): void {
+    this.db.prepare(`
+      INSERT INTO auth_sessions (token, user_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).run(token, userId, createdAt, expiresAt);
+  }
+
+  public getAuthSessionUser(token: string): {
+    id: string;
+    email: string;
+    fullName: string | null;
+    createdAt: number;
+    expiresAt: number;
+  } | null {
+    const row = this.db.prepare(`
+      SELECT s.expires_at, u.id, u.email, u.full_name, u.created_at
+      FROM auth_sessions s
+      JOIN auth_users u ON u.id = s.user_id
+      WHERE s.token = ?
+    `).get(token) as Record<string, unknown> | undefined;
+
+    if (!row) return null;
+    const expiresAt = Number(row.expires_at);
+    if (Date.now() > expiresAt) {
+      this.deleteAuthSession(token);
+      return null;
+    }
+
+    return {
+      id: String(row.id),
+      email: String(row.email),
+      fullName: row.full_name ? String(row.full_name) : null,
+      createdAt: Number(row.created_at),
+      expiresAt,
+    };
+  }
+
+  public deleteAuthSession(token: string): void {
+    this.db.prepare('DELETE FROM auth_sessions WHERE token = ?').run(token);
   }
 
   public getDatabaseStats(): {

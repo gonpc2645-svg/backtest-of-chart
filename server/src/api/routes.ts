@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'node:crypto';
 import { CONFIG } from '../config/index.js';
 import { DatabaseService } from '../database/connection.js';
 import { IngestionWorker } from '../services/ingestionWorker.js';
@@ -508,6 +509,133 @@ apiRouter.get('/replay/candles', (req: Request, res: Response) => {
       candleCount: candles.length,
       candles,
     });
+  } catch (err: unknown) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ========================================================================
+// BUILT-IN EMAIL AUTHENTICATION ENDPOINTS (Scrypt + SQLite Session Tokens)
+// ========================================================================
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+apiRouter.post('/auth/signup', (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    const fullNameRaw = typeof req.body?.fullName === 'string' ? req.body.fullName.trim() : '';
+    const fullName = fullNameRaw.length > 0 ? fullNameRaw.slice(0, 80) : null;
+
+    if (!email || !email.includes('@') || email.length > 180) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+    if (password.length < 6 || password.length > 256) {
+      return res.status(400).json({ success: false, error: 'Password must be between 6 and 256 characters.' });
+    }
+
+    const existing = dbService.getAuthUserByEmail(email);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: 'An account with this email already exists. Please log in instead.',
+      });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    const now = Date.now();
+    const userId = `usr_${crypto.randomUUID()}`;
+    const user = dbService.createAuthUser({
+      id: userId,
+      email,
+      fullName,
+      passwordHash: hash,
+      passwordSalt: salt,
+      createdAt: now,
+    });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = now + SESSION_TTL_MS;
+    dbService.createAuthSession(token, user.id, now, expiresAt);
+
+    res.status(201).json({
+      success: true,
+      token,
+      expiresAt,
+      user,
+    });
+  } catch (err: unknown) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+apiRouter.post('/auth/login', (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password are required.' });
+    }
+
+    const record = dbService.getAuthUserByEmail(email);
+    if (!record) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+    }
+
+    const expectedBuf = Buffer.from(record.passwordHash, 'hex');
+    const actualBuf = crypto.scryptSync(password, record.passwordSalt, 64);
+    if (expectedBuf.length !== actualBuf.length || !crypto.timingSafeEqual(expectedBuf, actualBuf)) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+    }
+
+    const now = Date.now();
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = now + SESSION_TTL_MS;
+    dbService.createAuthSession(token, record.id, now, expiresAt);
+
+    res.json({
+      success: true,
+      token,
+      expiresAt,
+      user: {
+        id: record.id,
+        email: record.email,
+        fullName: record.fullName,
+        createdAt: record.createdAt,
+      },
+    });
+  } catch (err: unknown) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+apiRouter.get('/auth/me', (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Missing session token.' });
+    }
+    const user = dbService.getAuthSessionUser(token);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Invalid or expired session.' });
+    }
+    res.json({ success: true, user });
+  } catch (err: unknown) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+apiRouter.post('/auth/logout', (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    if (token) {
+      dbService.deleteAuthSession(token);
+    }
+    res.json({ success: true });
   } catch (err: unknown) {
     res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
   }

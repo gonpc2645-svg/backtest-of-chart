@@ -94,3 +94,21 @@ CREATE TABLE IF NOT EXISTS fetched_day_cache (
   fetched_at INTEGER NOT NULL,
   PRIMARY KEY (instrument_id, utc_date)
 );
+
+-- 6. Built-in Email Authentication Tables (Fallback / Local Backend Account Persistence)
+CREATE TABLE IF NOT EXISTS auth_users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  full_name TEXT,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES auth_users(id) ON DELETE CASCADE
+);
