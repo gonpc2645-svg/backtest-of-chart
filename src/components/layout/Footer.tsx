@@ -7,6 +7,11 @@ export const Footer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Keep Replay Terminal distraction-free
+  if (location.pathname.startsWith('/backtest/replay')) {
+    return null;
+  }
+
   const handleSectionLink = (
     event: React.MouseEvent<HTMLAnchorElement>,
     sectionId: string | null
@@ -33,6 +38,10 @@ export const Footer: React.FC = () => {
     }
   };
 
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <footer className="site-footer" role="contentinfo">
       <div className="container site-footer__inner">
@@ -42,24 +51,18 @@ export const Footer: React.FC = () => {
               <BrandLogo showTagline size="md" />
             </Link>
             <p className="site-footer__description">
-              {BRAND_IDENTITY.positioning} Designed to help traders study
-              historical price movements, replay market sessions, and evaluate
-              simulated trading decisions in a risk-free environment.
+              Practice. Replay. Analyze. Improve. Built for disciplined traders who
+              demand historical accuracy, instant order simulation, and institutional
+              performance analytics without expensive monthly paywalls.
             </p>
             <div className="site-footer__badges">
-              <span className="status-pill status-pill--cyan">
-                100% Free Platform
-              </span>
-              <span className="status-pill status-pill--neutral">
-                No Account Required
-              </span>
-              <span className="status-pill status-pill--neutral">
-                Simulation Only
-              </span>
+              <span className="tc-glass-pill">100% Free Forever</span>
+              <span className="tc-glass-pill">Zero Signup Wall</span>
+              <span className="tc-glass-pill">M1 Real Market Data</span>
             </div>
           </div>
 
-          <div className="site-footer__nav-cols">
+          <div className="site-footer__nav-cols site-footer__nav-cols--tc">
             <div className="site-footer__col">
               <h3 className="site-footer__heading">Platform</h3>
               <ul className="site-footer__list">
@@ -74,20 +77,20 @@ export const Footer: React.FC = () => {
                 </li>
                 <li>
                   <a
-                    href="/#about"
-                    className="site-footer__link"
-                    onClick={(e) => handleSectionLink(e, 'about')}
-                  >
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a
                     href="/#features"
                     className="site-footer__link"
                     onClick={(e) => handleSectionLink(e, 'features')}
                   >
                     Features
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/#pricing"
+                    className="site-footer__link"
+                    onClick={(e) => handleSectionLink(e, 'pricing')}
+                  >
+                    Compare Plans
                   </a>
                 </li>
                 <li>
@@ -99,16 +102,41 @@ export const Footer: React.FC = () => {
                     FAQ
                   </a>
                 </li>
+              </ul>
+            </div>
+
+            <div className="site-footer__col">
+              <h3 className="site-footer__heading">Workspace</h3>
+              <ul className="site-footer__list">
                 <li>
                   <Link to="/backtest" className="site-footer__link">
                     Backtest Setup
                   </Link>
                 </li>
+                <li>
+                  <Link to="/backtest/replay" className="site-footer__link">
+                    Bar Replay Terminal
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/backtest/analytics" className="site-footer__link">
+                    Analytics &amp; Journal
+                  </Link>
+                </li>
+                <li>
+                  <a
+                    href="/#supported-markets"
+                    className="site-footer__link"
+                    onClick={(e) => handleSectionLink(e, 'supported-markets')}
+                  >
+                    Supported Pairs
+                  </a>
+                </li>
               </ul>
             </div>
 
             <div className="site-footer__col">
-              <h3 className="site-footer__heading">Legal &amp; Support</h3>
+              <h3 className="site-footer__heading">Legals &amp; Support</h3>
               <ul className="site-footer__list">
                 <li>
                   <Link to="/privacy" className="site-footer__link">
@@ -122,7 +150,7 @@ export const Footer: React.FC = () => {
                 </li>
                 <li>
                   <Link to="/contact" className="site-footer__link">
-                    Contact
+                    Contact Support
                   </Link>
                 </li>
               </ul>
@@ -130,12 +158,33 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
+        {/* Live Session Schedule / Trading Killzone Reference Strip */}
+        <div className="tc-footer-sessions-strip" aria-label="Global Market Killzones Reference">
+          <div className="tc-footer-sessions-strip__title">
+            <span className="tc-live-dot" />
+            <span>GLOBAL TRADING SESSIONS (UTC)</span>
+          </div>
+          <div className="tc-footer-sessions-strip__items">
+            <span><strong>Asian Range:</strong> 00:00 – 07:00 UTC</span>
+            <span><strong>London Open:</strong> 07:00 – 12:00 UTC</span>
+            <span><strong>NY / London Overlap:</strong> 12:00 – 16:00 UTC</span>
+            <span><strong>New York PM:</strong> 16:00 – 21:00 UTC</span>
+          </div>
+        </div>
+
         <div className="site-footer__bottom">
           <p className="site-footer__copyright">
-            &copy; {new Date().getFullYear()} {BRAND_IDENTITY.name}. All rights
-            reserved. Independent Historical Market Backtesting Platform.
+            &copy; {new Date().getFullYear()} {BRAND_IDENTITY.name}. Simulated Historical Backtesting &amp; Journaling Environment.
           </p>
-          <p className="site-footer__tagline-text">{BRAND_IDENTITY.tagline}</p>
+
+          <button
+            type="button"
+            className="tc-ghost-pill tc-back-to-top-btn"
+            onClick={scrollToTop}
+          >
+            <span>Back to top</span>
+            <span aria-hidden="true">&uarr;</span>
+          </button>
         </div>
       </div>
     </footer>

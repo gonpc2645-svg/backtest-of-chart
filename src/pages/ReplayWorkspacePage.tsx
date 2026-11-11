@@ -58,6 +58,7 @@ export const ReplayWorkspacePage: React.FC = () => {
 
   // Enhanced Chart & Pro Backtest States
   const [showEma, setShowEma] = useState<boolean>(true);
+  const [chartTheme, setChartTheme] = useState<'dark' | 'light'>('dark');
   const [chartViewMode, setChartViewMode] = useState<'REPLAY' | 'LIVE_TV'>('REPLAY');
   const [fromDateInput, setFromDateInput] = useState<string>('2025-01-14');
   const [toDateInput, setToDateInput] = useState<string>('2025-01-17');
@@ -228,6 +229,7 @@ export const ReplayWorkspacePage: React.FC = () => {
     adapter.initialize(chartContainerRef.current, (legend) => {
       setCurrentLegend(legend);
     });
+    adapter.setTheme(chartTheme);
     chartAdapterRef.current = adapter;
 
     const engine = new ReplayEngine(session);
@@ -426,6 +428,14 @@ export const ReplayWorkspacePage: React.FC = () => {
       return next;
     });
   }, []);
+
+  const handleToggleChartTheme = useCallback(() => {
+    setChartTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    chartAdapterRef.current?.setTheme(chartTheme);
+  }, [chartTheme]);
 
   // FX Replay style "Go-To Next Session" (Jumps to London 07:00, NY 13:00, or Tokyo 00:00 UTC)
   const handleSkipToNextSession = useCallback(async () => {
@@ -654,8 +664,8 @@ export const ReplayWorkspacePage: React.FC = () => {
   return (
     <div className="replay-workspace">
       {/* 1. Header Bar */}
-      <header className="replay-header" style={{ height: 'auto', minHeight: 54, padding: '6px 14px', flexWrap: 'wrap' }}>
-        <div className="replay-header__left" style={{ flexWrap: 'wrap', gap: 8 }}>
+      <header className="replay-header">
+        <div className="replay-header__left">
           <Link to="/backtest" className="replay-header__back-btn" title="Back to Setup">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -729,7 +739,7 @@ export const ReplayWorkspacePage: React.FC = () => {
             </button>
           </form>
 
-          {/* Indicator & Chart Mode Switcher */}
+          {/* Indicator, Chart Theme & Live Mode Switcher */}
           <button
             type="button"
             className={`replay-timeframe-btn ${showEma ? 'replay-timeframe-btn--active' : ''}`}
@@ -737,6 +747,17 @@ export const ReplayWorkspacePage: React.FC = () => {
             title="Toggle EMA 20 & EMA 50 Indicators"
           >
             EMA 20/50
+          </button>
+
+          <button
+            type="button"
+            className={`replay-timeframe-btn ${chartTheme === 'light' ? 'replay-timeframe-btn--active' : ''}`}
+            onClick={handleToggleChartTheme}
+            aria-pressed={chartTheme === 'light'}
+            data-testid="chart-theme-toggle"
+            title="Switch between Ocean Dark and Traders Casa Light Chart Theme"
+          >
+            {chartTheme === 'light' ? '☀ Casa Light' : '🌙 Ocean Dark'}
           </button>
 
           <button
@@ -805,7 +826,11 @@ export const ReplayWorkspacePage: React.FC = () => {
       {/* 3. Center Replay Body (Chart + Order Entry Panel) */}
       <div className="replay-workspace-body">
         {/* Chart Area */}
-        <main className="replay-chart-area">
+        <main
+          className="replay-chart-area"
+          data-chart-theme={chartTheme}
+          style={{ backgroundColor: chartTheme === 'light' ? '#F9F9F9' : '#05141F' }}
+        >
           {/* Chart Pick Mode Banner */}
           {chartPickTarget !== 'NONE' && (
             <div className="replay-draw-banner" style={{ left: 160 }}>
@@ -886,7 +911,7 @@ export const ReplayWorkspacePage: React.FC = () => {
                 height: '100%',
                 border: 'none',
                 zIndex: 15,
-                background: '#070A10',
+                background: '#05141F',
               }}
             />
           )}

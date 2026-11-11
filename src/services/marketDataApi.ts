@@ -131,6 +131,13 @@ const BINANCE_VISION_DIRECT_MAP: Record<string, string> = {
 
 const realCandleChunkCache = new Map<string, ApiCandle[]>();
 
+function getBinanceBaseUrl(): string {
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return '/binance-api';
+  }
+  return 'https://data-api.binance.vision';
+}
+
 async function fetchBinanceVisionM1(
   inst: ApiMarketInstrument,
   binanceSymbol: string,
@@ -138,7 +145,7 @@ async function fetchBinanceVisionM1(
   toTs: number,
   limit: number
 ): Promise<ApiCandle[]> {
-  const url = `https://data-api.binance.vision/api/v3/klines?symbol=${encodeURIComponent(
+  const url = `${getBinanceBaseUrl()}/api/v3/klines?symbol=${encodeURIComponent(
     binanceSymbol
   )}&interval=1m&startTime=${Math.floor(fromTs)}&endTime=${Math.floor(toTs)}&limit=${Math.min(limit, 1000)}`;
   const res = await fetch(url);
@@ -173,14 +180,15 @@ async function fetchBinanceCrossPairM1(
   limit: number
 ): Promise<ApiCandle[]> {
   const lim = Math.min(limit, 1000);
+  const base = getBinanceBaseUrl();
   const [resNum, resDen] = await Promise.all([
     fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=${numSymbol}&interval=1m&startTime=${Math.floor(
+      `${base}/api/v3/klines?symbol=${numSymbol}&interval=1m&startTime=${Math.floor(
         fromTs
       )}&endTime=${Math.floor(toTs)}&limit=${lim}`
     ),
     fetch(
-      `https://data-api.binance.vision/api/v3/klines?symbol=${denSymbol}&interval=1m&startTime=${Math.floor(
+      `${base}/api/v3/klines?symbol=${denSymbol}&interval=1m&startTime=${Math.floor(
         fromTs
       )}&endTime=${Math.floor(toTs)}&limit=${lim}`
     ),

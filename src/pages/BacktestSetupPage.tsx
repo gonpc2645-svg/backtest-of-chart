@@ -284,10 +284,12 @@ export const BacktestSetupPage: React.FC = () => {
         {/* Page Heading */}
         <header className="setup-page__header">
           <div className="section-eyebrow">SESSION CONFIGURATION</div>
-          <h1 className="setup-page__title">CONFIGURE YOUR BACKTEST</h1>
+          <h1 className="setup-page__title">
+            Configure your <span className="tc-serif-accent">session.</span>
+          </h1>
           <p className="setup-page__subtitle">
-            Choose your market, select a verified instrument, and prepare your
-            historical backtesting session.
+            Choose your market, select a pair, pick your exact From &rarr; To date range,
+            and launch institutional bar replay in seconds.
           </p>
         </header>
 

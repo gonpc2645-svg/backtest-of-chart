@@ -16,6 +16,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/yahoo-api/, ''),
       },
+      '/binance-api': {
+        target: 'https://data-api.binance.vision',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/binance-api/, ''),
+      },
     },
   },
   preview: {
@@ -29,6 +34,11 @@ export default defineConfig({
         target: 'https://query1.finance.yahoo.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/yahoo-api/, ''),
+      },
+      '/binance-api': {
+        target: 'https://data-api.binance.vision',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/binance-api/, ''),
       },
     },
   },

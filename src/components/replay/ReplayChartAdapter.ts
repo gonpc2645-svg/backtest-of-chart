@@ -54,32 +54,32 @@ export class ReplayChartAdapter {
       width: container.clientWidth || 800,
       height: container.clientHeight || 500,
       layout: {
-        background: { type: ColorType.Solid, color: '#070A10' },
+        background: { type: ColorType.Solid, color: '#05141F' },
         textColor: '#94A3B8',
         fontSize: 12,
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: '"Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, sans-serif',
       },
       grid: {
-        vertLines: { color: 'rgba(27, 37, 55, 0.6)' },
-        horzLines: { color: 'rgba(27, 37, 55, 0.6)' },
+        vertLines: { color: 'rgba(46, 230, 242, 0.06)' },
+        horzLines: { color: 'rgba(46, 230, 242, 0.06)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: 'rgba(56, 189, 248, 0.5)',
+          color: 'rgba(46, 230, 242, 0.5)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#0F172A',
+          labelBackgroundColor: '#022E4A',
         },
         horzLine: {
-          color: 'rgba(56, 189, 248, 0.5)',
+          color: 'rgba(46, 230, 242, 0.5)',
           width: 1,
           style: 2,
-          labelBackgroundColor: '#0F172A',
+          labelBackgroundColor: '#022E4A',
         },
       },
       rightPriceScale: {
-        borderColor: '#1E293B',
+        borderColor: 'rgba(255, 255, 255, 0.12)',
         scaleMargins: {
           top: 0.1,
           bottom: 0.2,
@@ -87,7 +87,7 @@ export class ReplayChartAdapter {
         autoScale: true,
       },
       timeScale: {
-        borderColor: '#1E293B',
+        borderColor: 'rgba(255, 255, 255, 0.12)',
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 5,
@@ -215,6 +215,57 @@ export class ReplayChartAdapter {
 
   public setOnPriceClick(cb?: (price: number, time: number) => void): void {
     this.onChartPriceClick = cb;
+  }
+
+  public setTheme(mode: 'dark' | 'light'): void {
+    if (!this.chart || !this.candleSeries) return;
+    if (mode === 'light') {
+      this.chart.applyOptions({
+        layout: {
+          background: { type: ColorType.Solid, color: '#F9F9F9' },
+          textColor: '#1E293B',
+        },
+        grid: {
+          vertLines: { color: 'rgba(15, 23, 42, 0.06)' },
+          horzLines: { color: 'rgba(15, 23, 42, 0.06)' },
+        },
+        rightPriceScale: { borderColor: '#CBD5E1' },
+        timeScale: { borderColor: '#CBD5E1' },
+        crosshair: {
+          vertLine: { color: 'rgba(10, 163, 212, 0.6)', labelBackgroundColor: '#02324F' },
+          horzLine: { color: 'rgba(10, 163, 212, 0.6)', labelBackgroundColor: '#02324F' },
+        },
+      });
+      this.candleSeries.applyOptions({
+        upColor: '#0AA3D4',
+        downColor: '#E11D48',
+        wickUpColor: '#0AA3D4',
+        wickDownColor: '#E11D48',
+      });
+    } else {
+      this.chart.applyOptions({
+        layout: {
+          background: { type: ColorType.Solid, color: '#05141F' },
+          textColor: '#94A3B8',
+        },
+        grid: {
+          vertLines: { color: 'rgba(46, 230, 242, 0.06)' },
+          horzLines: { color: 'rgba(46, 230, 242, 0.06)' },
+        },
+        rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.12)' },
+        timeScale: { borderColor: 'rgba(255, 255, 255, 0.12)' },
+        crosshair: {
+          vertLine: { color: 'rgba(46, 230, 242, 0.5)', labelBackgroundColor: '#022E4A' },
+          horzLine: { color: 'rgba(46, 230, 242, 0.5)', labelBackgroundColor: '#022E4A' },
+        },
+      });
+      this.candleSeries.applyOptions({
+        upColor: '#22D3EE',
+        downColor: '#F43F5E',
+        wickUpColor: '#22D3EE',
+        wickDownColor: '#F43F5E',
+      });
+    }
   }
 
   public subscribeVisualChange(cb: () => void): () => void {

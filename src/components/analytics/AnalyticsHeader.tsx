@@ -56,7 +56,9 @@ export const AnalyticsHeader: React.FC<AnalyticsHeaderProps> = ({ report, onRefr
         </Link>
 
         <div className="analytics-header__title-row">
-          <h1 className="analytics-header__title">Performance Analytics</h1>
+          <h1 className="analytics-header__title">
+            Performance <span className="tc-serif-accent">Analytics.</span>
+          </h1>
           <span className="analytics-header__badge analytics-header__badge--status">
             {report.replayStatus}
           </span>
